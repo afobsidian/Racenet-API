@@ -74,6 +74,20 @@ class QVLine(QtWidgets.QFrame):
         self.setStyleSheet("background-color: #c0c0c0;")
 
 
+class HorizontalBar(QtWidgets.QFrame):
+    def __init__(self, value: float, max_value: float):
+        super(HorizontalBar, self).__init__()
+
+        self.value = value
+        self.max_value = max_value
+        self.setFixedHeight(20)
+        self.setFixedWidth(140)
+        value = int((self.value / self.max_value)*self.width())
+        self.setFixedWidth(value)
+        self.setStyleSheet(
+            f"background-color: #00FF00; border-radius: 5px;")
+
+
 class SelectionSummaryWidget(QtWidgets.QWidget):
     def __init__(self, selection: Selection):
         super(SelectionSummaryWidget, self).__init__()
@@ -81,12 +95,10 @@ class SelectionSummaryWidget(QtWidgets.QWidget):
         self.setLayout(layout)
         layout.addWidget(SmallInfoLabel(selection.number))
         layout.addWidget(SmallInfoLabel(selection.name))
-        layout.addWidget(SmallInfoLabel(selection.barrier))
         layout.addWidget(SmallInfoLabel(selection.trainer.name))
         layout.addWidget(SmallInfoLabel(selection.jockey.name))
         layout.addWidget(SmallInfoLabel(selection.weight))
         layout.addWidget(SmallInfoLabel(selection.punters_edge))
-        layout.addWidget(SmallInfoLabel(selection.prediction))
 
 
 class SelectionWidget(QtWidgets.QWidget):
@@ -115,6 +127,7 @@ class SelectionsWidget(QtWidgets.QWidget):
     def __init__(self, selections: list[Selection]):
         super(SelectionsWidget, self).__init__()
         self.setMinimumHeight(530)
+        self.setMaximumHeight(530)
 
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
@@ -248,7 +261,7 @@ class EventNumberWidget(QtWidgets.QWidget):
         if event_parent is None:
             return
         events_parent = event_parent.parent()
-        if type(events_parent) is EventsWidget:
+        if type(events_parent) is EventsInfoWidget:
             events_parent.set_tab_index(self.event_number - 1)
 
 
@@ -265,15 +278,167 @@ class EventNumbersWidget(QtWidgets.QWidget):
         events_layout.addStretch()
 
 
-class EventsWidget(QtWidgets.QWidget):
-    def __init__(self, meeting: Meeting):
-        super(EventsWidget, self).__init__()
+class SelectionGraphWidget(QtWidgets.QWidget):
+    def __init__(self, value: float, max_value: float, number: int):
+        super(SelectionGraphWidget, self).__init__()
+
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        label = SmallInfoLabel(number)
+        # set width so all labels are the same size
+        label.setFixedWidth(25)
+        layout.addWidget(label)
+        layout.addWidget(HorizontalBar(
+            value, max_value), alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(SmallInfoLabel(value))
+        layout.addStretch()
+
+
+class EventStatsWidget(QtWidgets.QWidget):
+    def __init__(self, event: Event):
+        super(EventStatsWidget, self).__init__()
+
+
+class EventSpeedWidget(QtWidgets.QWidget):
+    def __init__(self, event: Event):
+        super(EventSpeedWidget, self).__init__()
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(SubtitleLabel("Early Speed"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        selections = sorted(event.selections, key=lambda x: x.barrier)
+        # graph based on barrier and predicted speed values
+        for selection in selections:
+            value = selection.prediction.normalized_speed
+            layout.addWidget(
+                SelectionGraphWidget(value, 1.0, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
+        layout.addWidget(SubtitleLabel("Finish Speed"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        # graph based on barrier and predicted speed values
+        for selection in selections:
+            value = selection.prediction.finish_speed
+            if value is None:
+                value = 0.0
+            layout.addWidget(
+                SelectionGraphWidget(value, 1.0, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+
+class EventModelWidget(QtWidgets.QWidget):
+    def __init__(self, event: Event):
+        super(EventModelWidget, self).__init__()
+
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(SubtitleLabel("Punter Edge"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        selections = event.selections
+        for selection in selections:
+            if selection.punters_edge is None:
+                selection.punters_edge = 0.0
+            if selection.prediction.model_output is None:
+                selection.prediction.model_output = 0.0
+            if selection.prediction.winning_chance is None:
+                selection.prediction.winning_chance = 0.0
+        selections.sort(key=lambda x: x.punters_edge, reverse=True)
+        selections = selections[:9]
+        # graph based on barrier and predicted speed values
+        for selection in selections:
+            value = selection.punters_edge
+            layout.addWidget(
+                SelectionGraphWidget(value, 1.0, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
+        layout.addWidget(SubtitleLabel("Model Output"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        selections = sorted(
+            selections, key=lambda x: x.prediction.model_output, reverse=True)[:9]
+        # graph based on barrier and predicted speed values
+        for selection in selections:
+            value = selection.prediction.model_output
+            max_value = 1.5 / event.starters
+            layout.addWidget(
+                SelectionGraphWidget(value, max_value, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
+        layout.addWidget(SubtitleLabel("Winning Chance"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        selections = sorted(
+            selections, key=lambda x: x.prediction.winning_chance, reverse=True)[:9]
+        # graph based on barrier and predicted speed values
+        for selection in selections:
+            value = selection.prediction.winning_chance
+            layout.addWidget(
+                SelectionGraphWidget(value, 0.85, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+
+class EventAnalysisWidget(QtWidgets.QWidget):
+    def __init__(self, event: Event):
+        super(EventAnalysisWidget, self).__init__()
+
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        self.setMinimumWidth(200)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        combo_box = QtWidgets.QComboBox()
+        combo_box.addItem("Speed Analysis")
+        combo_box.addItem("Model Analysis")
+        combo_box.addItem("Stats Analysis")
+        layout.addWidget(combo_box)
+        combo_box.currentIndexChanged.connect(
+            lambda index: self.change_analysis(index, event))
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        layout.addWidget(EventSpeedWidget(event))
+
+    def change_analysis(self, index: int, event: Event):
+        layout = self.layout()
+        if layout is None:
+            return
+        for i in reversed(range(layout.count())):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            elif type(item.widget()) is QtWidgets.QComboBox:
+                continue
+            elif item.widget() is None:
+                continue
+            item.widget().setParent(None)
+        if index == 0:
+            layout.addWidget(EventSpeedWidget(event))
+        elif index == 1:
+            layout.addWidget(EventModelWidget(event))
+        elif index == 2:
+            layout.addWidget(EventStatsWidget(event))
+
+
+class EventsInfoWidget(QtWidgets.QWidget):
+    def __init__(self, meeting: Meeting):
+        super(EventsInfoWidget, self).__init__()
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(
-            EventNumbersWidget(meeting), 0,
+            EventNumbersWidget(meeting), 1,
             QtCore.Qt.AlignmentFlag.AlignTop)
         self.event_tab_widget = EventsTabWidget(meeting)
         layout.addWidget(
@@ -282,6 +447,36 @@ class EventsWidget(QtWidgets.QWidget):
 
     def set_tab_index(self, index: int):
         self.event_tab_widget.setCurrentIndex(index)
+        parent = self.parent()
+        if type(parent) is EventsWidget:
+            parent.change_race(index)
+
+
+class EventsWidget(QtWidgets.QWidget):
+    def __init__(self, meeting: Meeting):
+        super(EventsWidget, self).__init__()
+
+        self.meeting = meeting
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(EventsInfoWidget(self.meeting))
+        layout.addWidget(
+            EventAnalysisWidget(self.meeting.events[0]),
+            alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+
+    def change_race(self, event_number: int):
+        layout = self.layout()
+        if layout is None:
+            return
+        item = layout.itemAt(layout.count()-1)
+        if item is None:
+            return
+        item.widget().setParent(None)
+        if type(layout) is QtWidgets.QHBoxLayout:
+            layout.addWidget(
+                EventAnalysisWidget(self.meeting.events[event_number]),
+                alignment=QtCore.Qt.AlignmentFlag.AlignRight)
 
 
 class MeetingInfoWidget(QtWidgets.QWidget):
@@ -328,6 +523,7 @@ class MeetingsTab(QtWidgets.QWidget):
         super(MeetingsTab, self).__init__()
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
         meeting_info_widget = MeetingInfoWidget(meeting)
         events_widget = EventsWidget(meeting)
         layout.addWidget(meeting_info_widget)
@@ -396,10 +592,10 @@ class ScraperTab(QtWidgets.QWidget):
         # with open("meetings.txt", "w") as file:
         #     for meeting in self.meetings:
         #         file.write(str(meeting) + "\n")
-        with open("meetings.txt", "r") as file:
-            self.meetings = []
-            for line in file.readlines():
-                self.meetings.append(eval(line))
+        # with open("meetings.txt", "r") as file:
+        #     self.meetings = []
+        #     for line in file.readlines():
+        #         self.meetings.append(eval(line))
         state_dict = group_by_state(self.meetings)
         for state, meetings in state_dict.items():
             state_frame = self.create_state_frame(state, meetings)
@@ -474,6 +670,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         widget = QtWidgets.QTabWidget()
         self.setCentralWidget(widget)
+        window_layout = QtWidgets.QFormLayout()
+        widget.setLayout(window_layout)
+        window_layout.setContentsMargins(10, 10, 10, 10)
+        # set to screen size
+        app = QtWidgets.QApplication.instance()
+        if type(app) is QtWidgets.QApplication:
+            screen_size = app.primaryScreen().size()
+            widget.setMaximumSize(screen_size)
         widget.addTab(ScraperTab(), "Home")
         widget.setTabsClosable(True)
         widget.tabCloseRequested.connect(lambda index: widget.removeTab(index))

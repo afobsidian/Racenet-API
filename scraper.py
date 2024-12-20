@@ -81,6 +81,7 @@ class MeetingsScraper:
         if meeting_data is None:
             return None
         meeting = Meeting.from_dict(meeting_data)
+        meeting.events.sort(key=lambda x: x.event_number)
         for index, event in enumerate(meeting.events):
             event_query = self.create_event_query(str(event.event_id))
             event_response = event_query.send_request()
@@ -91,8 +92,8 @@ class MeetingsScraper:
             if event_data is None:
                 continue
             meeting.events[index] = Event.from_dict(event_data)
-            meeting.events[index].selections = sorted(
-                meeting.events[index].selections, key=lambda x: x.number)
+            meeting.events[index].selections.sort(
+                key=lambda x: x.number)
 
             stats_query = self.create_stats_query(str(event.event_id))
             stats_response = stats_query.send_request()
