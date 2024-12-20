@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 SPELL_THRESHOLD = 45
 FRESHEST_THRESHOLD = 25
@@ -58,22 +58,40 @@ class Jockey:
                 last_year_win_percentage=0.0,
                 last_year_place_percentage=0.0
             )
-        last_year_places_list = data.get('lastYearPlaces', [])
+
+        stats = data.get('stats', {})
+        if stats is None:
+            return cls(
+                id=data.get('id', 0),
+                name=data.get('name', ""),
+                last_year_runs=0,
+                last_year_win_percentage=0.0,
+                last_year_place_percentage=0.0
+            )
+
+        last_year_places_list = stats.get('lastYearPlaces', [])
         if len(last_year_places_list) < 3:
+            last_year_runs = 0
             last_year_win_percentage = 0.0
             last_year_place_percentage = 0.0
         else:
             last_year_wins = last_year_places_list[0]
             last_year_places = last_year_places_list[1]
             last_year_places += last_year_places_list[2]
-            last_year_win_percentage = float(
-                last_year_wins / data.get('lastYearRuns', 1))
-            last_year_place_percentage = float(
-                last_year_places / data.get('lastYearRuns', 1))
+            last_year_runs = stats.get('lastYearRuns')
+            if last_year_runs == 0 or last_year_runs is None:
+                last_year_win_percentage = 0.0
+                last_year_place_percentage = 0.0
+                last_year_runs = 0
+            else:
+                last_year_win_percentage = float(
+                    last_year_wins / last_year_runs)
+                last_year_place_percentage = float(
+                    last_year_places / last_year_runs)
         return cls(
             id=data.get('id', 0),
             name=data.get('name', ""),
-            last_year_runs=data.get('lastYearRuns', 0),
+            last_year_runs=stats.get('lastYearRuns', 0),
             last_year_win_percentage=last_year_win_percentage,
             last_year_place_percentage=last_year_place_percentage
         )
@@ -99,23 +117,41 @@ class Trainer:
                 last_year_win_percentage=0.0,
                 last_year_place_percentage=0.0
             )
-        last_year_places_list = data.get('lastYearPlaces', [])
+        stats = data.get('stats', {})
+        if stats is None:
+            return cls(
+                id=data.get('id', 0),
+                name=data.get('name', ""),
+                location=data.get('location', ""),
+                last_year_runs=0,
+                last_year_win_percentage=0.0,
+                last_year_place_percentage=0.0
+            )
+
+        last_year_places_list = stats.get('lastYearPlaces', [])
         if len(last_year_places_list) < 3:
+            last_year_runs = 0
             last_year_win_percentage = 0.0
             last_year_place_percentage = 0.0
         else:
             last_year_wins = last_year_places_list[0]
             last_year_places = last_year_places_list[1]
             last_year_places += last_year_places_list[2]
-            last_year_win_percentage = float(
-                last_year_wins / data.get('lastYearRuns', 1))
-            last_year_place_percentage = float(
-                last_year_places / data.get('lastYearRuns', 1))
+            last_year_runs = stats.get('lastYearRuns')
+            if last_year_runs == 0 or last_year_runs is None:
+                last_year_win_percentage = 0.0
+                last_year_place_percentage = 0.0
+                last_year_runs = 0
+            else:
+                last_year_win_percentage = float(
+                    last_year_wins / last_year_runs)
+                last_year_place_percentage = float(
+                    last_year_places / last_year_runs)
         return cls(
             id=data.get('id', 0),
             name=data.get('name', ""),
             location=data.get('location', ""),
-            last_year_runs=data.get('lastYearRuns', 0),
+            last_year_runs=last_year_runs,
             last_year_win_percentage=last_year_win_percentage,
             last_year_place_percentage=last_year_place_percentage
         )
@@ -201,13 +237,13 @@ class FormBenchmark:
         )
 
 
-@ dataclass
+@dataclass
 class PositionSummary:
     distance: int
     position: Optional[int]
     time: str
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'PositionSummary':
         if data is None:
             return cls(
@@ -222,7 +258,7 @@ class PositionSummary:
         )
 
 
-@ dataclass
+@dataclass
 class Run:
     id: str
     finish_position: int
@@ -259,7 +295,7 @@ class Run:
     position_summaries: list[PositionSummary]
     form_benchmark: FormBenchmark
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Run':
         if data is None:
             return cls(
@@ -323,7 +359,7 @@ class Run:
 
         l600_time = 0.0
         finish_time = 0.0
-        sectional_times = data.get('sectionalTimes', {})
+        sectional_times = data.get('sectionalTime', {})
         if sectional_times is not None:
             l600_data = sectional_times.get('l600', {})
             if l600_data is not None:
@@ -345,7 +381,7 @@ class Run:
                 distance = summary.distance
                 if distance not in [200, 400, 600, 800]:
                     continue
-                sectional_times = data.get('sectionalTimes', {})
+                sectional_times = data.get('sectionalTime', {})
                 if sectional_times is None:
                     continue
                 sectional_time_data = sectional_times.get(f'l{distance}', {})
@@ -389,7 +425,7 @@ class Run:
         )
 
 
-@ dataclass
+@dataclass
 class Selection:
     id: str
     name: str
@@ -417,7 +453,7 @@ class Selection:
     wet_runs_place_percentage: float
     roi: float
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Selection':
         if data is None:
             return cls(
@@ -542,11 +578,12 @@ class Selection:
         self.roi = stats.get('roi', 0.0)
 
 
-@ dataclass
+@dataclass
 class Event:
     event_id: int
     name: str
     slug: str
+    time: str
     event_number: int
     distance: int
     starters: int
@@ -559,7 +596,7 @@ class Event:
     comments: dict[str, str]
     selections: list[Selection]
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Event':
         event_comments = data.get('comments', [])
         comments = {}
@@ -591,10 +628,22 @@ class Event:
         else:
             weather = ""
 
+        time_data = data.get('startTime', "")
+        if time_data == None:
+            time = ""
+        else:
+            # 2024-12-20T07:00:00.000Z convert to 12 hour sydney time
+            utc_time = datetime.strptime(time_data, "%Y-%m-%dT%H:%M:%S.%fZ")
+            # sydney is 11 hours ahead of utc time but changes to 10 hours ahead during daylight savings
+            sydney_time = utc_time.replace(
+                tzinfo=timezone.utc).astimezone(tz=None)
+            time = sydney_time.strftime("%I:%M %p")
+
         return cls(
             event_id=data.get('id', 0),
             name=data.get('name', ""),
             slug=data.get('slug', ""),
+            time=time,
             event_number=data.get('eventNumber', 0),
             distance=data.get('distance', 0),
             starters=data.get('starters', 0),
@@ -609,15 +658,16 @@ class Event:
         )
 
 
-@ dataclass
+@dataclass
 class Meeting:
     meeting_id: str
     name: str
     slug: str
+    state: str
     rail_position: str
     events: list[Event]
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Meeting':
         events = []
         for event in data.get('events', []):
@@ -627,6 +677,17 @@ class Meeting:
             meeting_id=data.get('id', ""),
             name=data.get('name', ""),
             slug=data.get('slug', ""),
+            state=data.get('state', ""),
             rail_position=data.get('railPosition', ""),
             events=events
         )
+
+
+def group_by_state(meetings: list[Meeting]) -> dict[str, list[Meeting]]:
+    state_groups: dict[str, list[Meeting]] = {}
+    for meeting in meetings:
+        state = meeting.state
+        if state not in state_groups:
+            state_groups[state] = []
+        state_groups[state].append(meeting)
+    return state_groups

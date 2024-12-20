@@ -194,4 +194,13 @@ class QueryRequest:
             headers=HEADERS,
             params=self.query_info.get_query_params()
         )
-        return response.json()
+        if response.status_code != 200:
+            print(response)
+            print("Request failed")
+            exit(1)
+
+        try:
+            return response.json()
+        except json.decoder.JSONDecodeError:
+            print(response)
+            raise ValueError("Invalid JSON response")

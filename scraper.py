@@ -11,13 +11,14 @@ import multiprocessing
 
 class MeetingsScraper:
 
-    def create_meetings_query(self) -> QueryRequest:
-        start_of_day = datetime.now().replace(
+    def create_meetings_query(self, scrape_date: datetime) -> QueryRequest:
+        scrape_date -= timedelta(days=1)
+        start_of_day = scrape_date.replace(
             hour=13, minute=0, second=0, microsecond=0)
         start_time = start_of_day.strftime(
             "%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-        tomorrow = start_of_day + timedelta(days=1)
+        tomorrow = scrape_date + timedelta(days=1)
         end_of_day = tomorrow.replace(
             hour=12, minute=59, second=59, microsecond=999)
         end_time = end_of_day.strftime(
@@ -80,7 +81,7 @@ class MeetingsScraper:
         if meeting_data is None:
             return None
         meeting = Meeting.from_dict(meeting_data)
-        for index, event in enumerate(meeting.events.copy()):
+        for index, event in enumerate(meeting.events):
             event_query = self.create_event_query(str(event.event_id))
             event_response = event_query.send_request()
             event_response_data = event_response.get('data')
@@ -90,6 +91,8 @@ class MeetingsScraper:
             if event_data is None:
                 continue
             meeting.events[index] = Event.from_dict(event_data)
+            meeting.events[index].selections = sorted(
+                meeting.events[index].selections, key=lambda x: x.number)
 
             stats_query = self.create_stats_query(str(event.event_id))
             stats_response = stats_query.send_request()
@@ -123,14 +126,15 @@ class MeetingsScraper:
                         selection.add_runs(form.get('forms'))
         return meeting
 
-    def get_meetings(self):
-        meetings_request = self.create_meetings_query()
+    def get_meetings(self, scrape_date: datetime) -> list[Meeting]:
+        meetings_request = self.create_meetings_query(scrape_date)
         meetings_response = meetings_request.send_request()
         meetings_slugs = self.parse_meetings_response(meetings_response)
         with multiprocessing.Pool() as pool:
             meetings_list = pool.map(self.get_meeting, meetings_slugs)
-        meetings_list = [meeting for meeting in meetings_list if meeting]
-        return meetings_list
+        formatted_meeting_list: list[Meeting] = [
+            meeting for meeting in meetings_list if meeting is not None]
+        return formatted_meeting_list
 
     def get_meeting(self, slug: str) -> Optional[Meeting]:
         meeting_request = self.create_meeting_query(slug)
