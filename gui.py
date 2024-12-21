@@ -8,8 +8,7 @@ from datetime import datetime
 import qdarkstyle
 import sys
 from typing import Union
-import multiprocessing
-
+from numerize import numerize
 
 class TitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
@@ -24,9 +23,8 @@ class SubtitleLabel(QtWidgets.QLabel):
         self.setStyleSheet("font-size: 20px; font-weight: bold;")
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
-
-class LargeInfoLabel(QtWidgets.QLabel):
-    def __init__(self, data: Union[str, int, float, object]):
+class InfoLabel(QtWidgets.QLabel):
+    def __init__(self, data: Union[str, int, float, object], font_size: int):
         if type(data) is float:
             text = f"{data:.2f}"
         elif type(data) is int:
@@ -35,24 +33,23 @@ class LargeInfoLabel(QtWidgets.QLabel):
             text = data
         else:
             text = str(data)
-        super(LargeInfoLabel, self).__init__(text)
-        self.setStyleSheet("font-size: 18px;")
+        super(InfoLabel, self).__init__(text)
+        self.setStyleSheet(f"font-size: {font_size}px;")
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
 
 
-class SmallInfoLabel(QtWidgets.QLabel):
+class LargeInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
-        if type(data) is float:
-            text = f"{data:.2f}"
-        elif type(data) is int:
-            text = f"{data:,}"
-        elif type(data) is str:
-            text = data
-        else:
-            text = str(data)
-        super(SmallInfoLabel, self).__init__(text)
-        self.setStyleSheet("font-size: 14px;")
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        super(LargeInfoLabel, self).__init__(data, 18)
+        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+class SmallInfoLabel(InfoLabel):
+    def __init__(self, data: Union[str, int, float, object]):
+        super(SmallInfoLabel, self).__init__(data, 14)
+
+class VerySmallInfoLabel(InfoLabel):
+    def __init__(self, data: Union[str, int, float, object]):
+        super(VerySmallInfoLabel, self).__init__(data, 12)
 
 
 class QHLine(QtWidgets.QFrame):
@@ -126,9 +123,8 @@ class SelectionWidget(QtWidgets.QWidget):
 class SelectionsWidget(QtWidgets.QWidget):
     def __init__(self, selections: list[Selection]):
         super(SelectionsWidget, self).__init__()
-        self.setMinimumHeight(530)
-        self.setMaximumHeight(530)
 
+        self.set_size()
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
         layout = QtWidgets.QVBoxLayout()
@@ -139,6 +135,10 @@ class SelectionsWidget(QtWidgets.QWidget):
         self.sections: list[tuple[Selection, QtWidgets.QFrame]] = []
         self.define_sections(selections)
         self.add_sections()
+
+    def set_size(self):
+        screen_size = QtWidgets.QApplication.primaryScreen().size()
+        self.setFixedHeight(screen_size.height() * 0.7)
 
     def add_sections(self):
         for (selection, widget) in self.sections:
@@ -292,13 +292,66 @@ class SelectionGraphWidget(QtWidgets.QWidget):
         layout.addWidget(label)
         layout.addWidget(HorizontalBar(
             value, max_value), alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(SmallInfoLabel(value))
+        if value > 1000:
+            value = numerize.numerize(value, 1)
+        layout.addWidget(VerySmallInfoLabel(value))
         layout.addStretch()
 
 
 class EventStatsWidget(QtWidgets.QWidget):
     def __init__(self, event: Event):
         super(EventStatsWidget, self).__init__()
+
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(SubtitleLabel("Train/Jock Win %"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        selections = sorted(event.selections, key=lambda x: x.trainer_jockey_win_percentage, reverse=True)
+        selections = selections[:9]
+        for selection in selections:
+            value = selection.trainer_jockey_win_percentage
+            layout.addWidget(
+                SelectionGraphWidget(value, 100, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
+        layout.addWidget(SubtitleLabel("Avg. Prize Money"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        selections = sorted(event.selections, key=lambda x: x.average_prize_money, reverse=True)
+        selections = selections[:9]
+        max_value = max([x.average_prize_money for x in selections]) * 1.1
+        # graph based on barrier and predicted speed values
+        for selection in selections:
+            value = selection.average_prize_money
+            if value is None:
+                value = 0.0
+            layout.addWidget(
+                SelectionGraphWidget(value, max_value, selection.number),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+            
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
+        layout.addWidget(SubtitleLabel("wWet W/P %"))
+        layout.addWidget(QHLine())
+        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
+        weighted_wet_win_place_values = []
+        for selection in selections:
+            weighted_wet_win_place = (selection.wet_runs_win_percentage * 2 + selection.wet_runs_place_percentage) / 3
+            weighted_wet_win_place_values.append((selection.number, weighted_wet_win_place))
+        weighted_wet_win_place_values.sort(key=lambda x: x[1], reverse=True)
+        weighted_wet_win_place_values = weighted_wet_win_place_values[:9]
+        # graph based on barrier and predicted speed values
+        for weighted_wet_win_place in weighted_wet_win_place_values:
+            value = weighted_wet_win_place
+            if value is None:
+                value = 0.0
+            layout.addWidget(
+                SelectionGraphWidget(weighted_wet_win_place[1], 100, weighted_wet_win_place[0]),
+                alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
 
 
 class EventSpeedWidget(QtWidgets.QWidget):
@@ -368,10 +421,10 @@ class EventModelWidget(QtWidgets.QWidget):
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
         selections = sorted(
             selections, key=lambda x: x.prediction.model_output, reverse=True)[:9]
+        max_value = max([x.prediction.model_output for x in selections])
         # graph based on barrier and predicted speed values
         for selection in selections:
             value = selection.prediction.model_output
-            max_value = 1.5 / event.starters
             layout.addWidget(
                 SelectionGraphWidget(value, max_value, selection.number),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop)
@@ -438,8 +491,8 @@ class EventsInfoWidget(QtWidgets.QWidget):
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(
-            EventNumbersWidget(meeting), 1,
-            QtCore.Qt.AlignmentFlag.AlignTop)
+            EventNumbersWidget(meeting),
+            alignment = QtCore.Qt.AlignmentFlag.AlignTop)
         self.event_tab_widget = EventsTabWidget(meeting)
         layout.addWidget(
             self.event_tab_widget, 1,
@@ -587,15 +640,15 @@ class ScraperTab(QtWidgets.QWidget):
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
         self.update()
 
-        scrape_date = datetime(date.year(), date.month(), date.day())
-        self.meetings = self.scraper.get_meetings(scrape_date)
+        # scrape_date = datetime(date.year(), date.month(), date.day())
+        # self.meetings = self.scraper.get_meetings(scrape_date)
         # with open("meetings.txt", "w") as file:
         #     for meeting in self.meetings:
         #         file.write(str(meeting) + "\n")
-        # with open("meetings.txt", "r") as file:
-        #     self.meetings = []
-        #     for line in file.readlines():
-        #         self.meetings.append(eval(line))
+        with open("meetings.txt", "r") as file:
+            self.meetings = []
+            for line in file.readlines():
+                self.meetings.append(eval(line))
         state_dict = group_by_state(self.meetings)
         for state, meetings in state_dict.items():
             state_frame = self.create_state_frame(state, meetings)
