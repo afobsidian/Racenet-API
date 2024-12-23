@@ -107,9 +107,9 @@ class HorizontalBar(QtWidgets.QFrame):
             f"background-color: #00FF00; border-radius: {screen_width_percentage(0.005)}px;")
 
 
-class SelectionSummaryColumnWidget(QtWidgets.QWidget):
+class SelectionColumnWidget(QtWidgets.QWidget):
     def __init__(self):
-        super(SelectionSummaryColumnWidget, self).__init__()
+        super(SelectionColumnWidget, self).__init__()
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -123,14 +123,17 @@ class SelectionSummaryColumnWidget(QtWidgets.QWidget):
         layout.addWidget(SmallInfoLabel(text))
 
 
-class SelectionSummaryWidget(QtWidgets.QWidget):
+class SelectionWidget(QtWidgets.QWidget):
+    clicked = QtCore.Signal()
+
     def __init__(self, selection: Selection):
-        super(SelectionSummaryWidget, self).__init__()
+        super(SelectionWidget, self).__init__()
+        self.selection = selection
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
         self.setContentsMargins(0, 0, 0, 0)
 
-        name_record_widget = SelectionSummaryColumnWidget()
+        name_record_widget = SelectionColumnWidget()
         name_record_widget.add_row_label(
             f"{selection.number}. {selection.name}")
         name_record_widget.add_row_label(
@@ -148,22 +151,8 @@ class SelectionSummaryWidget(QtWidgets.QWidget):
         for odds in selection.odds:
             if odds.bookmaker == "bet365" and odds.bet_type == "Win":
                 layout.addWidget(SmallInfoLabel(f"${odds.price:.2f}"))
-
-
-class SelectionWidget(QtWidgets.QScrollArea):
-    clicked = QtCore.Signal()
-
-    def __init__(self, selection: Selection):
-        super(SelectionWidget, self).__init__()
-        self.selection = selection
-        layout = QtWidgets.QHBoxLayout()
-        self.setLayout(layout)
-        self.setContentsMargins(0, 0, 0, 0)
-        selection_summary = SelectionSummaryWidget(selection)
-        layout.addWidget(
-            selection_summary,
-            alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
-        selection_summary.installEventFilter(self)
+        layout.addStretch()
+        self.installEventFilter(self)
 
     def eventFilter(self, obj, event):
         if event.type() == QtCore.QEvent.Type.MouseButtonPress and \
@@ -187,9 +176,8 @@ class SelectionsWidget(QtWidgets.QWidget):
         layout.addWidget(self.tree)
         self.setLayout(layout)
         self.tree.setIndentation(0)
-        self.tree.setStyleSheet("QTreeWidget::item {margin: 0px;}")
 
-        self.sections: list[tuple[Selection, QtWidgets.QFrame]] = []
+        self.sections: list[tuple[Selection, QtWidgets.QWidget]] = []
         self.define_sections(selections)
         self.add_sections()
 
@@ -201,10 +189,11 @@ class SelectionsWidget(QtWidgets.QWidget):
 
     def define_sections(self, selections: list[Selection]):
         for selection in selections:
-            widget = QtWidgets.QFrame(self.tree)
+            widget = QtWidgets.QWidget(self.tree)
             layout = QtWidgets.QHBoxLayout(widget)
-            layout.addWidget(QtWidgets.QLabel("Bla"))
-            layout.addWidget(QtWidgets.QLabel("Blubb"))
+            widget.setLayout(layout)
+            layout.addWidget(SmallInfoLabel("Bla"))
+            layout.addWidget(SmallInfoLabel("Blubb"))
             self.sections.append((selection, widget))
 
     def add_button(self, selection: Selection):
