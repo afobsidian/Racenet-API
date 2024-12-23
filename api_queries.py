@@ -1,7 +1,11 @@
 import requests
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+
+BOOKMAKERS = ["bet365", "betfair"]
+BET_TYPES = ["fixed-win", "exchange-win", "exchange-win-lay", "fixed-place"]
+PRICE_TYPE = ["bookmaker", "best"]
 
 
 class QueryType(Enum):
@@ -12,6 +16,7 @@ class QueryType(Enum):
     FULL_FORM = 4
     STATS = 5
     EVENT = 6
+    ODDS = 7
 
 
 class Variables:
@@ -116,6 +121,21 @@ class EventQueryVariables(Variables):
         }
 
 
+@dataclass
+class OddsQueryVariables(Variables):
+    eventId: str
+    bookmakers: list[str] = field(default_factory=lambda: BOOKMAKERS)
+    betTypes: list[str] = field(default_factory=lambda: BET_TYPES)
+    priceType: list[str] = field(default_factory=lambda: PRICE_TYPE)
+    fluctuations: int = 4
+    _type: QueryType = QueryType.ODDS
+
+    def get_dict(self):
+        return {
+            "selectionIds": self.selectionIds
+        }
+
+
 OPERATION_NAMES = {
     QueryType.MEETINGS_DATE: "meetingsByStartEndDate",
     QueryType.MEETINGS_DATE_COUNTRY: "meetingsByStartEndDateAndCountryName",
@@ -145,16 +165,26 @@ class QueryInfo:
     def get_query_params(self):
         if self.variables._type != self.query_type:
             raise ValueError("Variables type does not match operation type")
-        params = {
-            "operationName": self.get_operation_name(),
-            "variables": json.dumps(self.variables.get_dict()),
-            "extensions": json.dumps({
-                "persistedQuery": {
-                    "version": 1,
-                    "sha256Hash": self.get_query_hash()
-                }
-            })
-        }
+        if self.query_type == QueryType.ODDS:
+            if type(self.variables) != OddsQueryVariables:
+                raise ValueError("Variables type does not match operation type")
+            params = {
+                "bookmaker": ",".join(self.variables.bookmakers),
+                "betTypes": ",".join(self.variables.betTypes),
+                "type": ",".join(self.variables.priceType),
+                "priceFluctuations": str(self.variables.fluctuations),
+            }
+        else:
+            params = {
+                "operationName": self.get_operation_name(),
+                "variables": json.dumps(self.variables.get_dict()),
+                "extensions": json.dumps({
+                    "persistedQuery": {
+                        "version": 1,
+                        "sha256Hash": self.get_query_hash()
+                    }
+                })
+            }
         return params
 
     def get_query_hash(self):
@@ -189,8 +219,16 @@ class QueryRequest:
         self.query_info = query_info
 
     def send_request(self) -> dict:
+        if self.query_info.query_type == QueryType.ODDS:
+            if type(self.query_info.variables) != OddsQueryVariables:
+                raise ValueError("Variables type does not match operation type")
+
+            request_url = f"https://puntapi.com/odds/au/event/{self.query_info.variables.eventId}"
+        else:
+            request_url = "https://puntapi.com/graphql-horse-racing"
+
         response = requests.get(
-            "https://puntapi.com/graphql-horse-racing?",
+            request_url,
             headers=HEADERS,
             params=self.query_info.get_query_params()
         )

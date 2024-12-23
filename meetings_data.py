@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime, timezone
 
 SPELL_THRESHOLD = 45
@@ -7,6 +7,100 @@ FRESHEST_THRESHOLD = 25
 
 
 @dataclass
+class OddFluctuation:
+    price: float
+    rolling_mean_deviation: float
+    time: str
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'OddFluctuation':
+        if data is None:
+            return cls(
+                price=0.0,
+                rolling_mean_deviation=0.0,
+                time=""
+            )
+
+        time_data = data.get('updatedAt')
+        if time_data is None:
+            return cls(
+                price=data.get('value', 0.0),
+                rolling_mean_deviation=data.get('rollingMeanDeviation', 0.0),
+                time=""
+            )
+
+        # 2024-12-20T07:00:00.000Z convert to 24 hour sydney time with MS precision
+        utc_time = datetime.strptime(time_data, "%Y-%m-%dT%H:%M:%S.%fZ")
+        sydney_time = utc_time.replace(
+            tzinfo=timezone.utc).astimezone(tz=None)
+        time = sydney_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+
+        return cls(
+            price=data.get('value', 0.0),
+            rolling_mean_deviation=data.get('rollingMeanDeviation', 0.0),
+            time=time
+        )
+
+
+@dataclass
+class Odds:
+    bookmaker: Literal["bet365", "betfair"]
+    bet_type: Literal["Win", "Place"]
+    price: float
+    movement: float
+    market_percentage: float
+    fluctuations: list[OddFluctuation]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Odds':
+        if data is None:
+            return cls(
+                bookmaker="",
+                bet_type="",
+                price=0.0,
+                movement=0.0,
+                market_percentage=0.0,
+                fluctuations=[]
+            )
+        bet_type = data.get('betType', "")
+        if "win" in bet_type.lower():
+            bet_type = "Win"
+        else:
+            bet_type = "Place"
+
+        bookmaker = data.get('bookmaker', "")
+        if "bet365" in bookmaker.lower():
+            bookmaker = "bet365"
+        else:
+            bookmaker = "betfair"
+
+        price_data = data.get('price', {})
+        if price_data is None:
+            return cls(
+                bookmaker=bookmaker,
+                bet_type=bet_type,
+                price=0.0,
+                movement=0.0,
+                market_percentage=data.get('marketPercentage', 0.0),
+                fluctuations=[]
+            )
+
+        price_value = price_data.get('value', 0.0)
+        movement = price_data.get('movement', 0.0)
+
+        fluctuation_data = price_data.get('fluctuations', [])
+        fluctuations = []
+        for fluctuation in fluctuation_data:
+            fluctuations.append(OddFluctuation.from_dict(fluctuation))
+
+        return cls(
+            bookmaker=bookmaker, bet_type=bet_type, price=price_value,
+            movement=movement, market_percentage=data.get(
+                'marketPercentage', 0.0),
+            fluctuations=fluctuations)
+
+
+@ dataclass
 class Prediction:
     normalized_speed: float
     normalized_speed_position: str
@@ -16,7 +110,7 @@ class Prediction:
     speed: float
     finish_speed: float
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Prediction':
         if data is None:
             return cls(
@@ -40,7 +134,7 @@ class Prediction:
         )
 
 
-@dataclass
+@ dataclass
 class Jockey:
     id: int
     name: str
@@ -48,7 +142,7 @@ class Jockey:
     last_year_win_percentage: float
     last_year_place_percentage: float
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Jockey':
         if data is None:
             return cls(
@@ -97,7 +191,7 @@ class Jockey:
         )
 
 
-@dataclass
+@ dataclass
 class Trainer:
     id: int
     name: str
@@ -106,7 +200,7 @@ class Trainer:
     last_year_win_percentage: float
     last_year_place_percentage: float
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Trainer':
         if data is None:
             return cls(
@@ -157,7 +251,7 @@ class Trainer:
         )
 
 
-@dataclass
+@ dataclass
 class FormBenchmark:
     runner_tempo_quantile_rank: str
     runner_tempo_label: str
@@ -180,7 +274,7 @@ class FormBenchmark:
     runner_meeting_position_l400: str
     runner_meeting_position_l200: str
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'FormBenchmark':
         if data is None:
             return cls(
@@ -237,13 +331,13 @@ class FormBenchmark:
         )
 
 
-@dataclass
+@ dataclass
 class PositionSummary:
     distance: int
     position: Optional[int]
     time: str
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'PositionSummary':
         if data is None:
             return cls(
@@ -258,7 +352,7 @@ class PositionSummary:
         )
 
 
-@dataclass
+@ dataclass
 class Run:
     id: str
     finish_position: int
@@ -295,7 +389,7 @@ class Run:
     position_summaries: list[PositionSummary]
     form_benchmark: FormBenchmark
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Run':
         if data is None:
             return cls(
@@ -425,7 +519,7 @@ class Run:
         )
 
 
-@dataclass
+@ dataclass
 class Selection:
     id: str
     name: str
@@ -452,8 +546,9 @@ class Selection:
     wet_runs_win_percentage: float
     wet_runs_place_percentage: float
     roi: float
+    odds: list[Odds]
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Selection':
         if data is None:
             return cls(
@@ -481,7 +576,8 @@ class Selection:
                 average_prize_money=0.0,
                 wet_runs_win_percentage=0.0,
                 wet_runs_place_percentage=0.0,
-                roi=0.0
+                roi=0.0,
+                odds=[]
             )
 
         competitor = data.get('competitor')
@@ -530,7 +626,8 @@ class Selection:
             average_prize_money=0.0,
             wet_runs_win_percentage=0.0,
             wet_runs_place_percentage=0.0,
-            roi=0.0
+            roi=0.0,
+            odds=[]
         )
 
     def add_runs(self, runs: list[dict]):
@@ -577,8 +674,11 @@ class Selection:
 
         self.roi = stats.get('roi', 0.0)
 
+    def add_odds(self, odds: dict):
+        self.odds.append(Odds.from_dict(odds))
 
-@dataclass
+
+@ dataclass
 class Event:
     event_id: int
     name: str
@@ -596,7 +696,7 @@ class Event:
     comments: dict[str, str]
     selections: list[Selection]
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Event':
         event_comments = data.get('comments', [])
         comments = {}
@@ -634,7 +734,6 @@ class Event:
         else:
             # 2024-12-20T07:00:00.000Z convert to 12 hour sydney time
             utc_time = datetime.strptime(time_data, "%Y-%m-%dT%H:%M:%S.%fZ")
-            # sydney is 11 hours ahead of utc time but changes to 10 hours ahead during daylight savings
             sydney_time = utc_time.replace(
                 tzinfo=timezone.utc).astimezone(tz=None)
             time = sydney_time.strftime("%I:%M %p")
@@ -658,7 +757,7 @@ class Event:
         )
 
 
-@dataclass
+@ dataclass
 class Meeting:
     meeting_id: str
     name: str
@@ -667,7 +766,7 @@ class Meeting:
     rail_position: str
     events: list[Event]
 
-    @classmethod
+    @ classmethod
     def from_dict(cls, data: dict) -> 'Meeting':
         events = []
         for event in data.get('events', []):

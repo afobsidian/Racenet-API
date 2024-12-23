@@ -10,18 +10,35 @@ import sys
 from typing import Union
 from numerize import numerize
 
+SCREEN_SIZE = QtCore.QSize()
+FONT = "Helvetica"
+
+
+def screen_width_percentage(percentage: float) -> int:
+    return int(SCREEN_SIZE.width() * percentage)
+
+
+def screen_height_percentage(percentage: float) -> int:
+    return int(SCREEN_SIZE.height() * percentage)
+
+
+class EventTickTimer(QtCore.QTimer):
+    def __init__(self, event: Event):
+        super(EventTickTimer, self).__init__()
+        self.event_time = datetime.strptime(event.time, "%I:%M %p")
+
 
 class TitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(TitleLabel, self).__init__(text)
-        self.setStyleSheet("font-size: 30px; font-weight: bold;")
+        self.setFont(QtGui.QFont(FONT, 26, weight=QtGui.QFont.Weight.Bold))
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
 
 class SubtitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(SubtitleLabel, self).__init__(text)
-        self.setStyleSheet("font-size: 20px; font-weight: bold;")
+        self.setFont(QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold))
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
 
@@ -36,24 +53,25 @@ class InfoLabel(QtWidgets.QLabel):
         else:
             text = str(data)
         super(InfoLabel, self).__init__(text)
-        self.setStyleSheet(f"font-size: {font_size}px;")
+        self.setFont(QtGui.QFont(FONT, font_size))
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.setStyleSheet("background-color: transparent;")
 
 
 class LargeInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
-        super(LargeInfoLabel, self).__init__(data, 18)
+        super(LargeInfoLabel, self).__init__(data, 14)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
 
 class SmallInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
-        super(SmallInfoLabel, self).__init__(data, 14)
+        super(SmallInfoLabel, self).__init__(data, 10)
 
 
 class VerySmallInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
-        super(VerySmallInfoLabel, self).__init__(data, 12)
+        super(VerySmallInfoLabel, self).__init__(data, 8)
 
 
 class QHLine(QtWidgets.QFrame):
@@ -81,12 +99,12 @@ class HorizontalBar(QtWidgets.QFrame):
 
         self.value = value
         self.max_value = max_value
-        self.setFixedHeight(20)
-        self.setFixedWidth(140)
+        self.setFixedHeight(screen_height_percentage(0.02))
+        self.setFixedWidth(screen_width_percentage(0.092))
         value = int((self.value / self.max_value) * self.width())
         self.setFixedWidth(value)
         self.setStyleSheet(
-            f"background-color: #00FF00; border-radius: 5px;")
+            f"background-color: #00FF00; border-radius: {screen_width_percentage(0.005)}px;")
 
 
 class SelectionSummaryWidget(QtWidgets.QWidget):
@@ -94,12 +112,16 @@ class SelectionSummaryWidget(QtWidgets.QWidget):
         super(SelectionSummaryWidget, self).__init__()
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
-        layout.addWidget(SmallInfoLabel(selection.number))
-        layout.addWidget(SmallInfoLabel(selection.name))
-        layout.addWidget(SmallInfoLabel(selection.trainer.name))
-        layout.addWidget(SmallInfoLabel(selection.jockey.name))
-        layout.addWidget(SmallInfoLabel(selection.weight))
-        layout.addWidget(SmallInfoLabel(selection.punters_edge))
+        layout.addWidget(SmallInfoLabel(
+            f"{selection.number}. {selection.name}"))
+        layout.addWidget(SmallInfoLabel("T: " + selection.trainer.name))
+        layout.addWidget(SmallInfoLabel("J: " + selection.jockey.name))
+        weight_string = f"{selection.weight}kg"
+        if selection.claim is not None:
+            weight_string += f" (a{selection.claim})"
+        layout.addWidget(SmallInfoLabel(weight_string))
+        layout.addWidget(SmallInfoLabel(
+            selection.prediction.normalized_speed_position.capitalize()))
 
 
 class SelectionWidget(QtWidgets.QWidget):
@@ -128,7 +150,7 @@ class SelectionsWidget(QtWidgets.QWidget):
     def __init__(self, selections: list[Selection]):
         super(SelectionsWidget, self).__init__()
 
-        self.set_size()
+        self.setFixedHeight(screen_height_percentage(0.69))
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
         layout = QtWidgets.QVBoxLayout()
@@ -139,10 +161,6 @@ class SelectionsWidget(QtWidgets.QWidget):
         self.sections: list[tuple[Selection, QtWidgets.QFrame]] = []
         self.define_sections(selections)
         self.add_sections()
-
-    def set_size(self):
-        screen_size = QtWidgets.QApplication.primaryScreen().size()
-        self.setFixedHeight(screen_size.height() * 0.7)
 
     def add_sections(self):
         for (selection, widget) in self.sections:
@@ -189,7 +207,9 @@ class EventInfoWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(SmallInfoLabel(event.name))
         layout.addWidget(QVLine())
-        layout.addWidget(SmallInfoLabel(self.get_time_remaining(event)))
+        self.time_remaining_label = SmallInfoLabel(
+            self.get_time_remaining(datetime.strptime(event.time, "%I:%M %p")))
+        layout.addWidget(self.time_remaining_label)
         layout.addWidget(QVLine())
         layout.addWidget(SmallInfoLabel(f"{event.distance}m"))
         layout.addWidget(QVLine())
@@ -203,14 +223,37 @@ class EventInfoWidget(QtWidgets.QWidget):
         layout.addWidget(SmallInfoLabel(f"{event._class} Class"))
         layout.addWidget(QVLine())
         layout.addStretch()
+        self.tick_timer = EventTickTimer(event)
+        self.tick_timer.timeout.connect(self.update_time_remaining)
+        self.tick_timer.start(1000)
 
-    def get_time_remaining(self, event: Event) -> str:
+    def get_time_remaining(self, event_time: datetime) -> str:
         current_time = datetime.now()
-        event_time = datetime.strptime(event.time, "%I:%M %p")
-        timedelta_remaining = event_time - current_time
-        # get time remaining in minutes and seconds
-        time_remaining = f"{timedelta_remaining.seconds // 60}m {timedelta_remaining.seconds % 60}s"
+        event_time = event_time.replace(
+            year=current_time.year, month=current_time.month,
+            day=current_time.day)
+        if event_time < current_time:
+            timedelta_remaining = current_time - event_time
+            hours = -timedelta_remaining.seconds // 3600
+            minutes = -timedelta_remaining.seconds % 3600 // 60
+            seconds = -timedelta_remaining.seconds % 60
+        else:
+            timedelta_remaining = event_time - current_time
+            hours = timedelta_remaining.seconds // 3600
+            minutes = timedelta_remaining.seconds % 3600 // 60
+            seconds = timedelta_remaining.seconds % 60
+        if hours == 0 and minutes == 0:
+            time_remaining = f"{seconds}s"
+        elif hours == 0:
+            time_remaining = f"{minutes}m {seconds}s"
+        else:
+            time_remaining = f"{hours}h {minutes}m"
         return time_remaining
+
+    def update_time_remaining(self):
+        self.time_remaining_label.setText(
+            self.get_time_remaining(self.tick_timer.event_time))
+        self.tick_timer.start(1000)
 
 
 class EventWidget(QtWidgets.QWidget):
@@ -245,14 +288,15 @@ class EventNumberWidget(QtWidgets.QWidget):
         self.setLayout(event_layout)
         event_button = QtWidgets.QPushButton(
             f"{self.event_number}")
-        event_button.setStyleSheet("font-size: 20px; font-weight: bold;")
+        event_button.setFont(QtGui.QFont(
+            FONT, 16, weight=QtGui.QFont.Weight.Bold))
         event_button.setCursor(QtGui.QCursor(
             QtCore.Qt.CursorShape.PointingHandCursor))
         # make button circular
         event_button.setStyleSheet(
-            "border-radius: 20px;")
-        event_button.setFixedWidth(40)
-        event_button.setFixedHeight(40)
+            f"border-radius: {screen_width_percentage(0.01)}px;")
+        event_button.setFixedWidth(screen_width_percentage(0.04))
+        event_button.setFixedHeight(screen_height_percentage(0.04))
         event_button.clicked.connect(self.button_clicked)
         event_label = LargeInfoLabel(f"{event.time}")
         event_layout.addWidget(
@@ -292,7 +336,7 @@ class SelectionGraphWidget(QtWidgets.QWidget):
         layout.setSpacing(0)
         label = SmallInfoLabel(number)
         # set width so all labels are the same size
-        label.setFixedWidth(25)
+        label.setFixedWidth(screen_width_percentage(0.016))
         layout.addWidget(label)
         layout.addWidget(HorizontalBar(
             value, max_value), alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
@@ -353,14 +397,13 @@ class EventStatsWidget(QtWidgets.QWidget):
         weighted_wet_win_place_values.sort(key=lambda x: x[1], reverse=True)
         weighted_wet_win_place_values = weighted_wet_win_place_values[:9]
         # graph based on barrier and predicted speed values
-        for weighted_wet_win_place in weighted_wet_win_place_values:
-            value = weighted_wet_win_place
-            if value is None:
-                value = 0.0
+        for wet_win_place in weighted_wet_win_place_values:
+            if wet_win_place[1] is None:
+                wet_win_place[1] = 0.0
             layout.addWidget(
                 SelectionGraphWidget(
-                    weighted_wet_win_place[1],
-                    100, weighted_wet_win_place[0]),
+                    wet_win_place[1],
+                    100, wet_win_place[0]),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop)
 
 
@@ -431,7 +474,7 @@ class EventModelWidget(QtWidgets.QWidget):
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
         selections = sorted(
             selections, key=lambda x: x.prediction.model_output, reverse=True)[:9]
-        max_value = max([x.prediction.model_output for x in selections])
+        max_value = max([x.prediction.model_output for x in selections]) * 1.1
         # graph based on barrier and predicted speed values
         for selection in selections:
             value = selection.prediction.model_output
@@ -459,7 +502,7 @@ class EventAnalysisWidget(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.setMinimumWidth(200)
+        self.setFixedWidth(screen_width_percentage(0.12))
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
@@ -548,9 +591,9 @@ class MeetingInfoWidget(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.setMaximumWidth(200)
+        self.setFixedWidth(screen_width_percentage(0.1))
 
-        layout.addWidget(SubtitleLabel(f"Meeting Name"))
+        layout.addWidget(SubtitleLabel(f"Track"))
         layout.addWidget(QHLine())
         layout.addWidget(LargeInfoLabel(meeting.name))
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 15))
@@ -564,7 +607,7 @@ class MeetingInfoWidget(QtWidgets.QWidget):
         track_type = meeting.events[0].track_type
         weather = meeting.events[0].weather
 
-        layout.addWidget(SubtitleLabel(f"Track Condition"))
+        layout.addWidget(SubtitleLabel(f"Condition"))
         layout.addWidget(QHLine())
         layout.addWidget(LargeInfoLabel(track_condition))
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 15))
@@ -586,7 +629,7 @@ class MeetingsTab(QtWidgets.QWidget):
         super(MeetingsTab, self).__init__()
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 5, 0)
         meeting_info_widget = MeetingInfoWidget(meeting)
         events_widget = EventsWidget(meeting)
         layout.addWidget(meeting_info_widget)
@@ -603,13 +646,14 @@ class ScraperTab(QtWidgets.QWidget):
         self.setLayout(horizontal_layout)
 
         date_widget = QtWidgets.QWidget()
-        date_widget.setMaximumWidth(200)
-        date_widget.setMinimumWidth(200)
+        date_widget.setFixedWidth(screen_width_percentage(0.12))
         date_form = QtWidgets.QFormLayout()
         date_widget.setLayout(date_form)
-        label = QtWidgets.QLabel("Date to Scrape")
-        label.setStyleSheet(
-            "font-size: 20px; font-weight: bold; text-decoration: underline;")
+        label = LargeInfoLabel("Date to Scrape")
+        font = QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold)
+        font.setUnderline(True)
+        label.setFont(font)
+
         label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         date_form.addRow(label)
         self.date_selector = QtWidgets.QDateEdit()
@@ -620,6 +664,9 @@ class ScraperTab(QtWidgets.QWidget):
         date_form.addWidget(self.scrape_button)
         self.scrape_button.clicked.connect(
             lambda: self.scrape_date(self.date_selector.date()))
+        self.local_checkbox = QtWidgets.QCheckBox("Use local data")
+        self.local_checkbox.setChecked(True)
+        date_form.addWidget(self.local_checkbox)
 
         meetings_widget = QtWidgets.QWidget()
         meetings_widget.setMaximumWidth(1000)
@@ -650,15 +697,18 @@ class ScraperTab(QtWidgets.QWidget):
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
         self.update()
 
-        scrape_date = datetime(date.year(), date.month(), date.day())
-        self.meetings = self.scraper.get_meetings(scrape_date)
-        with open("meetings.txt", "w") as file:
-            for meeting in self.meetings:
-                file.write(str(meeting) + "\n")
-        # with open("meetings.txt", "r") as file:
-        #     self.meetings = []
-        #     for line in file.readlines():
-        #         self.meetings.append(eval(line))
+        if self.local_checkbox.isChecked():
+            with open("meetings.txt", "r") as file:
+                self.meetings = []
+                for line in file.readlines():
+                    self.meetings.append(eval(line))
+        else:
+            scrape_date = datetime(date.year(), date.month(), date.day())
+            self.meetings = self.scraper.get_meetings(scrape_date)
+            with open("meetings.txt", "w") as file:
+                for meeting in self.meetings:
+                    file.write(str(meeting) + "\n")
+
         state_dict = group_by_state(self.meetings)
         for state, meetings in state_dict.items():
             state_frame = self.create_state_frame(state, meetings)
@@ -672,12 +722,14 @@ class ScraperTab(QtWidgets.QWidget):
             self, state: str, meetings: list[Meeting]) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
         layout = QtWidgets.QVBoxLayout()
-        title_label = QtWidgets.QLabel(state)
-        title_label.setStyleSheet("font-size: 30px; font-weight: bold;")
+        frame.setLayout(layout)
+        title_label = TitleLabel(state)
+        title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(title_label)
-        horizontal_line = QHLine()
-        layout.addWidget(horizontal_line)
+        layout.addWidget(QHLine())
+        state_widget = QtWidgets.QWidget()
         horizontal_layout = QtWidgets.QHBoxLayout()
+        state_widget.setLayout(horizontal_layout)
         for meeting in meetings:
             meeting_name = meeting.name
             button = QtWidgets.QPushButton(meeting_name)
@@ -686,15 +738,11 @@ class ScraperTab(QtWidgets.QWidget):
             button.setCursor(QtGui.QCursor(
                 QtCore.Qt.CursorShape.PointingHandCursor))
             button.clicked.connect(self.open_meeting_window)
-            button.setFixedHeight(30)
+            button.setFixedHeight(screen_height_percentage(0.04))
             horizontal_layout.addWidget(button)
 
         horizontal_layout.addStretch()
-        for widget in horizontal_layout.children():
-            if type(widget) is QtWidgets.QPushButton:
-                print(widget.text())
-        layout.addLayout(horizontal_layout)
-        frame.setLayout(layout)
+        layout.addWidget(state_widget)
         return frame
 
     def open_meeting_window(self):
@@ -737,12 +785,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(widget)
         window_layout = QtWidgets.QFormLayout()
         widget.setLayout(window_layout)
-        window_layout.setContentsMargins(10, 10, 10, 10)
-        # set to screen size
-        app = MeetingScraperApp.instance()
-        if type(app) is MeetingScraperApp:
-            screen_size = app.primaryScreen().size()
-            widget.setMaximumSize(screen_size)
+        window_layout.setContentsMargins(10, 10, 10, 0)
+        widget.setMaximumSize(SCREEN_SIZE)
+
         widget.addTab(ScraperTab(scraper), "Home")
         widget.setTabsClosable(True)
         widget.tabCloseRequested.connect(lambda index: widget.removeTab(index))
@@ -765,7 +810,9 @@ class MeetingScraperApp(QtWidgets.QApplication):
         self.setFont(app_font)
 
     def run(self, scraper: MeetingsScraper) -> int:
+        global SCREEN_SIZE
+        SCREEN_SIZE = QtWidgets.QApplication.primaryScreen().size()
         window = MainWindow(scraper)
         window.showMaximized()
 
-        return self.exec()
+        return self.exec_()

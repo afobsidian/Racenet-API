@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta
 from api_queries import QueryInfo, QueryRequest, QueryType, FullFormQueryVariables, \
     StatsQueryVariables, EventQueryVariables, MeetingsTimeQueryVariables, \
-    MeetingsDateCountryQueryVariables, MeetingsDateQueryVariables, \
-    MeetingSlugQueryVariables
+    OddsQueryVariables, MeetingSlugQueryVariables
 
 from meetings_data import Meeting, Jockey, Trainer, Event, Selection, Prediction
 from typing import Optional
@@ -51,6 +50,13 @@ class MeetingsScraper:
             query_type=QueryType.STATS,
             variables=stats_variables)
         return QueryRequest(query_info=stats_query)
+
+    def create_odds_query(self, event_id: str) -> QueryRequest:
+        odds_variables = OddsQueryVariables(eventId=event_id)
+        odds_query = QueryInfo(
+            query_type=QueryType.ODDS,
+            variables=odds_variables)
+        return QueryRequest(query_info=odds_query)
 
     def create_form_query(self, selection_ids: list) -> QueryRequest:
         form_query = QueryInfo(
@@ -107,6 +113,16 @@ class MeetingsScraper:
                 for stats in stats_data:
                     if selection.id == stats.get('selectionId'):
                         selection.add_stats(stats)
+
+            odds_query = self.create_odds_query(str(event.event_id))
+            odds_response = odds_query.send_request()
+            odds_response_data = odds_response.get('odds')
+            if odds_response_data is None:
+                continue
+            for selection in meeting.events[index].selections:
+                for odds_response in odds_response_data:
+                    if selection.id == str(odds_response.get('selectionId', 0)):
+                        selection.add_odds(odds_response)
 
             selection_ids = []
             for selection in meeting.events[index].selections:
