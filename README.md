@@ -3,11 +3,14 @@
 ## Install
 
 To create virtual env to run, navigate to directory containing "requirements.txt" and perform the following:
-    `python -m pip install pipenv`
-    `python -m pipenv install`
+- `python -m pip install virtualenv`
+- `python -m venv .venv`
 
-To activate the pipenv environment, perform the following:
-    `python -m pipenv shell`
+To activate the virtual env environment, perform the following:
+- `.venv\Scripts\Activate.ps1`
 
-To run the program with or without a virtual env, perform the following in the directory with the "main.py" file:
-    `python ./main.py`
+To install the requirements for the program run:
+- `python -m pip install -r requirements.txt`
+
+To run the program with or without a virtual env, once the requirements are installed, perform the following in the directory with the "main.py" file:
+- `python main.py`
