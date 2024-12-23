@@ -7,13 +7,13 @@ FRESHEST_THRESHOLD = 25
 
 
 @dataclass
-class OddFluctuation:
+class OddsFluctuation:
     price: float
     rolling_mean_deviation: float
     time: str
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'OddFluctuation':
+    def from_dict(cls, data: dict) -> 'OddsFluctuation':
         if data is None:
             return cls(
                 price=0.0,
@@ -49,7 +49,7 @@ class Odds:
     price: float
     movement: float
     market_percentage: float
-    fluctuations: list[OddFluctuation]
+    fluctuations: list[OddsFluctuation]
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Odds':
@@ -68,7 +68,7 @@ class Odds:
         else:
             bet_type = "Place"
 
-        bookmaker = data.get('bookmaker', "")
+        bookmaker = data.get('bookmakerId', "")
         if "bet365" in bookmaker.lower():
             bookmaker = "bet365"
         else:
@@ -91,7 +91,7 @@ class Odds:
         fluctuation_data = price_data.get('fluctuations', [])
         fluctuations = []
         for fluctuation in fluctuation_data:
-            fluctuations.append(OddFluctuation.from_dict(fluctuation))
+            fluctuations.append(OddsFluctuation.from_dict(fluctuation))
 
         return cls(
             bookmaker=bookmaker, bet_type=bet_type, price=price_value,

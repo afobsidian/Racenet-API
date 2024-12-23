@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets, QtGui
-from meetings_data import Meeting, group_by_state, Event, Selection, Run, PositionSummary, FormBenchmark, Trainer, \
-    Jockey, Prediction
+from meetings_data import Meeting, group_by_state, Event, Selection, Run, PositionSummary, \
+    FormBenchmark, Trainer, Jockey, Prediction, Odds, OddsFluctuation
 from scraper import MeetingsScraper
 from datetime import datetime
 import qdarkstyle
@@ -107,13 +107,36 @@ class HorizontalBar(QtWidgets.QFrame):
             f"background-color: #00FF00; border-radius: {screen_width_percentage(0.005)}px;")
 
 
+class SelectionSummaryColumnWidget(QtWidgets.QWidget):
+    def __init__(self):
+        super(SelectionSummaryColumnWidget, self).__init__()
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        self.setStyleSheet("background-color: transparent;")
+
+    def add_row_label(self, text: str):
+        layout = self.layout()
+        if layout is None:
+            return
+        layout.addWidget(SmallInfoLabel(text))
+
+
 class SelectionSummaryWidget(QtWidgets.QWidget):
     def __init__(self, selection: Selection):
         super(SelectionSummaryWidget, self).__init__()
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
-        layout.addWidget(SmallInfoLabel(
-            f"{selection.number}. {selection.name}"))
+        self.setContentsMargins(0, 0, 0, 0)
+
+        name_record_widget = SelectionSummaryColumnWidget()
+        name_record_widget.add_row_label(
+            f"{selection.number}. {selection.name}")
+        name_record_widget.add_row_label(
+            f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}")
+        layout.addWidget(name_record_widget)
+
         layout.addWidget(SmallInfoLabel("T: " + selection.trainer.name))
         layout.addWidget(SmallInfoLabel("J: " + selection.jockey.name))
         weight_string = f"{selection.weight}kg"
@@ -122,9 +145,12 @@ class SelectionSummaryWidget(QtWidgets.QWidget):
         layout.addWidget(SmallInfoLabel(weight_string))
         layout.addWidget(SmallInfoLabel(
             selection.prediction.normalized_speed_position.capitalize()))
+        for odds in selection.odds:
+            if odds.bookmaker == "bet365" and odds.bet_type == "Win":
+                layout.addWidget(SmallInfoLabel(f"${odds.price:.2f}"))
 
 
-class SelectionWidget(QtWidgets.QWidget):
+class SelectionWidget(QtWidgets.QScrollArea):
     clicked = QtCore.Signal()
 
     def __init__(self, selection: Selection):
@@ -132,6 +158,7 @@ class SelectionWidget(QtWidgets.QWidget):
         self.selection = selection
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
+        self.setContentsMargins(0, 0, 0, 0)
         selection_summary = SelectionSummaryWidget(selection)
         layout.addWidget(
             selection_summary,
@@ -149,14 +176,18 @@ class SelectionWidget(QtWidgets.QWidget):
 class SelectionsWidget(QtWidgets.QWidget):
     def __init__(self, selections: list[Selection]):
         super(SelectionsWidget, self).__init__()
-
+        self.setContentsMargins(0, 0, 0, 0)
         self.setFixedHeight(screen_height_percentage(0.69))
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.tree.setContentsMargins(0, 0, 0, 0)
         layout = QtWidgets.QVBoxLayout()
+        layout.stretch(0)
+        layout.setSpacing(0)
         layout.addWidget(self.tree)
         self.setLayout(layout)
         self.tree.setIndentation(0)
+        self.tree.setStyleSheet("QTreeWidget::item {margin: 0px;}")
 
         self.sections: list[tuple[Selection, QtWidgets.QFrame]] = []
         self.define_sections(selections)
