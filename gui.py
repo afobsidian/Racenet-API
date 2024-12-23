@@ -10,6 +10,7 @@ import sys
 from typing import Union
 from numerize import numerize
 
+
 class TitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(TitleLabel, self).__init__(text)
@@ -22,6 +23,7 @@ class SubtitleLabel(QtWidgets.QLabel):
         super(SubtitleLabel, self).__init__(text)
         self.setStyleSheet("font-size: 20px; font-weight: bold;")
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
 
 class InfoLabel(QtWidgets.QLabel):
     def __init__(self, data: Union[str, int, float, object], font_size: int):
@@ -43,9 +45,11 @@ class LargeInfoLabel(InfoLabel):
         super(LargeInfoLabel, self).__init__(data, 18)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
+
 class SmallInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
         super(SmallInfoLabel, self).__init__(data, 14)
+
 
 class VerySmallInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
@@ -79,7 +83,7 @@ class HorizontalBar(QtWidgets.QFrame):
         self.max_value = max_value
         self.setFixedHeight(20)
         self.setFixedWidth(140)
-        value = int((self.value / self.max_value)*self.width())
+        value = int((self.value / self.max_value) * self.width())
         self.setFixedWidth(value)
         self.setStyleSheet(
             f"background-color: #00FF00; border-radius: 5px;")
@@ -309,7 +313,9 @@ class EventStatsWidget(QtWidgets.QWidget):
         layout.addWidget(SubtitleLabel("Train/Jock Win %"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        selections = sorted(event.selections, key=lambda x: x.trainer_jockey_win_percentage, reverse=True)
+        selections = sorted(
+            event.selections, key=lambda x: x.trainer_jockey_win_percentage,
+            reverse=True)
         selections = selections[:9]
         for selection in selections:
             value = selection.trainer_jockey_win_percentage
@@ -321,7 +327,8 @@ class EventStatsWidget(QtWidgets.QWidget):
         layout.addWidget(SubtitleLabel("Avg. Prize Money"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        selections = sorted(event.selections, key=lambda x: x.average_prize_money, reverse=True)
+        selections = sorted(
+            event.selections, key=lambda x: x.average_prize_money, reverse=True)
         selections = selections[:9]
         max_value = max([x.average_prize_money for x in selections]) * 1.1
         # graph based on barrier and predicted speed values
@@ -332,15 +339,17 @@ class EventStatsWidget(QtWidgets.QWidget):
             layout.addWidget(
                 SelectionGraphWidget(value, max_value, selection.number),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop)
-            
+
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
         layout.addWidget(SubtitleLabel("wWet W/P %"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
         weighted_wet_win_place_values = []
         for selection in selections:
-            weighted_wet_win_place = (selection.wet_runs_win_percentage * 2 + selection.wet_runs_place_percentage) / 3
-            weighted_wet_win_place_values.append((selection.number, weighted_wet_win_place))
+            weighted_wet_win_place = (
+                selection.wet_runs_win_percentage * 2 + selection.wet_runs_place_percentage) / 3
+            weighted_wet_win_place_values.append(
+                (selection.number, weighted_wet_win_place))
         weighted_wet_win_place_values.sort(key=lambda x: x[1], reverse=True)
         weighted_wet_win_place_values = weighted_wet_win_place_values[:9]
         # graph based on barrier and predicted speed values
@@ -349,9 +358,10 @@ class EventStatsWidget(QtWidgets.QWidget):
             if value is None:
                 value = 0.0
             layout.addWidget(
-                SelectionGraphWidget(weighted_wet_win_place[1], 100, weighted_wet_win_place[0]),
+                SelectionGraphWidget(
+                    weighted_wet_win_place[1],
+                    100, weighted_wet_win_place[0]),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop)
-
 
 
 class EventSpeedWidget(QtWidgets.QWidget):
@@ -492,7 +502,7 @@ class EventsInfoWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(
             EventNumbersWidget(meeting),
-            alignment = QtCore.Qt.AlignmentFlag.AlignTop)
+            alignment=QtCore.Qt.AlignmentFlag.AlignTop)
         self.event_tab_widget = EventsTabWidget(meeting)
         layout.addWidget(
             self.event_tab_widget, 1,
@@ -522,7 +532,7 @@ class EventsWidget(QtWidgets.QWidget):
         layout = self.layout()
         if layout is None:
             return
-        item = layout.itemAt(layout.count()-1)
+        item = layout.itemAt(layout.count() - 1)
         if item is None:
             return
         item.widget().setParent(None)
@@ -584,10 +594,10 @@ class MeetingsTab(QtWidgets.QWidget):
 
 
 class ScraperTab(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, scraper: MeetingsScraper):
         super(ScraperTab, self).__init__()
 
-        self.scraper = MeetingsScraper()
+        self.scraper = scraper
         self.meetings: list[Meeting] = []
         horizontal_layout = QtWidgets.QHBoxLayout()
         self.setLayout(horizontal_layout)
@@ -658,7 +668,8 @@ class ScraperTab(QtWidgets.QWidget):
         self.scrape_button.setText("Extract")
         self.scrape_button.setEnabled(True)
 
-    def create_state_frame(self, state: str, meetings: list[Meeting]) -> QtWidgets.QFrame:
+    def create_state_frame(
+            self, state: str, meetings: list[Meeting]) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
         layout = QtWidgets.QVBoxLayout()
         title_label = QtWidgets.QLabel(state)
@@ -695,7 +706,8 @@ class ScraperTab(QtWidgets.QWidget):
         self.update()
         meeting_name = sender.text()
         meeting = next(
-            (meeting for meeting in self.meetings if meeting.name == meeting_name))
+            (meeting for meeting in self.meetings
+             if meeting.name == meeting_name))
         tab_widget = self.parent().parent()
         if type(tab_widget) is QtWidgets.QTabWidget:
             # check if the tab widget already exists
@@ -718,7 +730,7 @@ class ScraperTab(QtWidgets.QWidget):
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self):
+    def __init__(self, scraper: MeetingsScraper):
         super(MainWindow, self).__init__()
 
         widget = QtWidgets.QTabWidget()
@@ -727,29 +739,33 @@ class MainWindow(QtWidgets.QMainWindow):
         widget.setLayout(window_layout)
         window_layout.setContentsMargins(10, 10, 10, 10)
         # set to screen size
-        app = QtWidgets.QApplication.instance()
-        if type(app) is QtWidgets.QApplication:
+        app = MeetingScraperApp.instance()
+        if type(app) is MeetingScraperApp:
             screen_size = app.primaryScreen().size()
             widget.setMaximumSize(screen_size)
-        widget.addTab(ScraperTab(), "Home")
+        widget.addTab(ScraperTab(scraper), "Home")
         widget.setTabsClosable(True)
         widget.tabCloseRequested.connect(lambda index: widget.removeTab(index))
         # remove border inside tabs
         widget.setStyleSheet("QTabWidget::pane {border: 0;}")
-        # widget.tabBar().hide()
 
 
-if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet(qdarkstyle.load_stylesheet_pyside6())
-    app.setApplicationName("Meeting Scraper")
-    app.setApplicationDisplayName("Meeting Scraper")
-    app_font = QtGui.QFont()
-    app_font.setFamily("Helvetica")
-    app_font.setPointSize(14)
-    app.setFont(app_font)
+class MeetingScraperApp(QtWidgets.QApplication):
+    def __init__(self):
+        super(MeetingScraperApp, self).__init__(sys.argv)
 
-    window = MainWindow()
-    window.showMaximized()
+        self.setStyleSheet(qdarkstyle.load_stylesheet_pyside6())
+        self.setApplicationName("Meeting Scraper")
+        self.setApplicationDisplayName("Meeting Scraper")
 
-    sys.exit(app.exec())
+        app_font = QtGui.QFont()
+        app_font.setFamily("Helvetica")
+        app_font.setPointSize(14)
+
+        self.setFont(app_font)
+
+    def run(self, scraper: MeetingsScraper) -> int:
+        window = MainWindow(scraper)
+        window.showMaximized()
+
+        return self.exec()

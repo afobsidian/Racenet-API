@@ -127,7 +127,8 @@ class MeetingsScraper:
                         selection.add_runs(form.get('forms'))
         return meeting
 
-    def get_meetings(self, scrape_date: datetime) -> list[Meeting]:
+    def get_meetings(
+            self, scrape_date: datetime = datetime.now()) -> list[Meeting]:
         meetings_request = self.create_meetings_query(scrape_date)
         meetings_response = meetings_request.send_request()
         meetings_slugs = self.parse_meetings_response(meetings_response)

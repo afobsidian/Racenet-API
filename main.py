@@ -1,6 +1,8 @@
+import sys
 from scraper import MeetingsScraper
+from gui import MeetingScraperApp
 
 if __name__ == '__main__':
     scraper = MeetingsScraper()
-    meetings = scraper.get_meetings()
-    print(meetings[0])
+    app = MeetingScraperApp()
+    sys.exit(app.run(scraper))
