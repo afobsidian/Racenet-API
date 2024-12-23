@@ -640,15 +640,15 @@ class ScraperTab(QtWidgets.QWidget):
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
         self.update()
 
-        # scrape_date = datetime(date.year(), date.month(), date.day())
-        # self.meetings = self.scraper.get_meetings(scrape_date)
-        # with open("meetings.txt", "w") as file:
-        #     for meeting in self.meetings:
-        #         file.write(str(meeting) + "\n")
-        with open("meetings.txt", "r") as file:
-            self.meetings = []
-            for line in file.readlines():
-                self.meetings.append(eval(line))
+        scrape_date = datetime(date.year(), date.month(), date.day())
+        self.meetings = self.scraper.get_meetings(scrape_date)
+        with open("meetings.txt", "w") as file:
+            for meeting in self.meetings:
+                file.write(str(meeting) + "\n")
+        # with open("meetings.txt", "r") as file:
+        #     self.meetings = []
+        #     for line in file.readlines():
+        #         self.meetings.append(eval(line))
         state_dict = group_by_state(self.meetings)
         for state, meetings in state_dict.items():
             state_frame = self.create_state_frame(state, meetings)
