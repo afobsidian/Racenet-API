@@ -44,7 +44,7 @@ class OddsFluctuation:
 
 @dataclass
 class Odds:
-    bookmaker: Literal["bet365", "betfair"]
+    bookmaker: Literal["racenetstandard", "bet365", "betfair"]
     bet_type: Literal["Win", "Place"]
     price: float
     movement: float
@@ -63,14 +63,16 @@ class Odds:
                 fluctuations=[]
             )
         bet_type = data.get('betType', "")
-        if "win" in bet_type.lower():
-            bet_type = "Win"
-        else:
+        if bet_type == "fixed-place":
             bet_type = "Place"
+        else:
+            bet_type = "Win"
 
         bookmaker = data.get('bookmakerId', "")
-        if "bet365" in bookmaker.lower():
+        if bookmaker == "bet365":
             bookmaker = "bet365"
+        elif bookmaker == "racenetstandard":
+            bookmaker = "racenetstandard"
         else:
             bookmaker = "betfair"
 
@@ -122,8 +124,11 @@ class Prediction:
                 speed=0.0,
                 finish_speed=0.0,
             )
+        normalized_speed = data.get('normSpeedMeasure', 0.0)
+        if normalized_speed == None:
+            normalized_speed = 0.0
         return cls(
-            normalized_speed=data.get('normSpeedMeasure', 0.0),
+            normalized_speed=float(normalized_speed),
             normalized_speed_position=data.get(
                 'normSpeedMeasureRatingName', ""),
             model_output=data.get('modelOutput', 0.0),
@@ -675,7 +680,9 @@ class Selection:
         self.roi = stats.get('roi', 0.0)
 
     def add_odds(self, odds: dict):
+        print(odds)
         self.odds.append(Odds.from_dict(odds))
+        print(self.odds[-1])
 
 
 @ dataclass
@@ -707,6 +714,9 @@ class Event:
 
         selections = []
         for selection in data.get('selections', []):
+            status = selection.get('status', "")
+            if status == "SCRATCHED":
+                continue
             selections.append(Selection.from_dict(selection))
 
         track_condition_data = data.get('trackCondition')

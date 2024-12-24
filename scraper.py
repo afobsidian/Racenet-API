@@ -65,12 +65,17 @@ class MeetingsScraper:
                 selectionIds=selection_ids, limit=10))
         return QueryRequest(query_info=form_query)
 
-    def parse_meetings_response(self, response: dict):
-        meetings_groups = response['data']['meetingsGrouped']
+    def parse_meetings_response(self, response: dict) -> list[str]:
+        meetings_data = response.get('data')
+        if meetings_data is None:
+            return []
+        meetings_groups = meetings_data.get('meetingsGrouped')
+        if meetings_groups is None:
+            return []
         australia_meetings = []
         for meeting_group in meetings_groups:
-            if meeting_group['group'] == "Australia":
-                australia_meetings = meeting_group['meetings']
+            if meeting_group.get('group') == "Australia":
+                australia_meetings = meeting_group.get('meetings')
                 break
 
         meeting_slugs = []
@@ -88,6 +93,7 @@ class MeetingsScraper:
             return None
         meeting = Meeting.from_dict(meeting_data)
         meeting.events.sort(key=lambda x: x.event_number)
+        delete_events = []
         for index, event in enumerate(meeting.events):
             event_query = self.create_event_query(str(event.event_id))
             event_response = event_query.send_request()
@@ -98,6 +104,12 @@ class MeetingsScraper:
             if event_data is None:
                 continue
             meeting.events[index] = Event.from_dict(event_data)
+            # if multiple selections numbers are none, continue
+            if all(
+                    selection.number is None
+                    for selection in meeting.events[index].selections):
+                delete_events.append(index)
+                continue
             meeting.events[index].selections.sort(
                 key=lambda x: x.number)
 
@@ -141,6 +153,10 @@ class MeetingsScraper:
                 for selection in meeting.events[index].selections:
                     if selection.id == form.get('selectionId'):
                         selection.add_runs(form.get('forms'))
+        for index in reversed(delete_events):
+            del meeting.events[index]
+        if len(meeting.events) == 0:
+            return None
         return meeting
 
     def get_meetings(

@@ -3,8 +3,8 @@ import json
 from dataclasses import dataclass, field
 from enum import Enum
 
-BOOKMAKERS = ["bet365", "betfair"]
-BET_TYPES = ["fixed-win", "exchange-win", "exchange-win-lay", "fixed-place"]
+BOOKMAKERS = ["racenetstandard"]
+BET_TYPES = ["fixed-win", "fixed-place"]
 PRICE_TYPE = ["bookmaker", "best"]
 
 
@@ -126,14 +126,9 @@ class OddsQueryVariables(Variables):
     eventId: str
     bookmakers: list[str] = field(default_factory=lambda: BOOKMAKERS)
     betTypes: list[str] = field(default_factory=lambda: BET_TYPES)
-    priceType: list[str] = field(default_factory=lambda: PRICE_TYPE)
+    priceType: list[str] = field(default_factory=list)
     fluctuations: int = 4
     _type: QueryType = QueryType.ODDS
-
-    def get_dict(self):
-        return {
-            "selectionIds": self.selectionIds
-        }
 
 
 OPERATION_NAMES = {
@@ -171,9 +166,10 @@ class QueryInfo:
             params = {
                 "bookmaker": ",".join(self.variables.bookmakers),
                 "betTypes": ",".join(self.variables.betTypes),
-                "type": ",".join(self.variables.priceType),
                 "priceFluctuations": str(self.variables.fluctuations),
             }
+            if len(self.variables.priceType) > 0:
+                params["type"] = ",".join(self.variables.priceType)
         else:
             params = {
                 "operationName": self.get_operation_name(),
@@ -233,9 +229,8 @@ class QueryRequest:
             params=self.query_info.get_query_params()
         )
         if response.status_code != 200:
-            print(response)
-            print("Request failed")
-            exit(1)
+            print("Request failed. Retrying...")
+            self.send_request()
 
         try:
             return response.json()

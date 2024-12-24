@@ -107,22 +107,6 @@ class HorizontalBar(QtWidgets.QFrame):
             f"background-color: #00FF00; border-radius: {screen_width_percentage(0.005)}px;")
 
 
-class SelectionColumnWidget(QtWidgets.QWidget):
-    def __init__(self):
-        super(SelectionColumnWidget, self).__init__()
-        layout = QtWidgets.QVBoxLayout()
-        self.setLayout(layout)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-        self.setStyleSheet("background-color: transparent;")
-
-    def add_row_label(self, text: str):
-        layout = self.layout()
-        if layout is None:
-            return
-        layout.addWidget(SmallInfoLabel(text))
-
-
 class SelectionWidget(QtWidgets.QWidget):
     clicked = QtCore.Signal()
 
@@ -131,26 +115,122 @@ class SelectionWidget(QtWidgets.QWidget):
         self.selection = selection
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
-        self.setContentsMargins(0, 0, 0, 0)
-
-        name_record_widget = SelectionColumnWidget()
-        name_record_widget.add_row_label(
-            f"{selection.number}. {selection.name}")
-        name_record_widget.add_row_label(
-            f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}")
-        layout.addWidget(name_record_widget)
-
-        layout.addWidget(SmallInfoLabel("T: " + selection.trainer.name))
-        layout.addWidget(SmallInfoLabel("J: " + selection.jockey.name))
+        layout.setSpacing(1)
+        layout.setContentsMargins(2, 2, 2, 2)
+        name_label = LargeInfoLabel(f"{selection.number}. {selection.name}")
+        name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        name_label.setFixedWidth(screen_width_percentage(0.15))
+        layout.addWidget(name_label)
         weight_string = f"{selection.weight}kg"
         if selection.claim is not None:
             weight_string += f" (a{selection.claim})"
-        layout.addWidget(SmallInfoLabel(weight_string))
-        layout.addWidget(SmallInfoLabel(
-            selection.prediction.normalized_speed_position.capitalize()))
-        for odds in selection.odds:
-            if odds.bookmaker == "bet365" and odds.bet_type == "Win":
-                layout.addWidget(SmallInfoLabel(f"${odds.price:.2f}"))
+        runs_widget = SmallInfoLabel(
+            f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}")
+        runs_widget.setFixedWidth(screen_width_percentage(0.035))
+        layout.addWidget(
+            runs_widget,
+            alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        weight_label = SmallInfoLabel(weight_string)
+        weight_label.setFixedWidth(screen_width_percentage(0.048))
+        layout.addWidget(
+            weight_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        barrier_label = SmallInfoLabel(f"{selection.barrier}")
+        barrier_label.setFixedWidth(screen_width_percentage(0.02))
+        layout.addWidget(
+            barrier_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        trainer_label = SmallInfoLabel("T: " + selection.trainer.name)
+        trainer_label.setFixedWidth(screen_width_percentage(0.09))
+        layout.addWidget(
+            trainer_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
+        jockey_label.setFixedWidth(screen_width_percentage(0.09))
+        layout.addWidget(
+            jockey_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        speed_position = selection.prediction.normalized_speed_position
+        if speed_position is not None:
+            speed_position = speed_position.capitalize()
+        speed_position_label = SmallInfoLabel(speed_position)
+        speed_position_label.setFixedWidth(screen_width_percentage(0.053))
+        layout.addWidget(speed_position_label,
+                         alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        # get all bet365 win odds
+        odds = [odds.price for odds in selection.odds
+                if odds.bet_type == "Win"]
+        if len(odds) > 0:
+            win_odds = odds[0]
+        else:
+            win_odds = 0.00
+
+        odds = [odds.price for odds in selection.odds
+                if odds.bet_type == "Place"]
+        if len(odds) > 0:
+            place_odds = odds[0]
+        else:
+            place_odds = 0.00
+        if win_odds > 20:
+            win_odds_string = f"${win_odds:.0f}"
+        else:
+            win_odds_string = f"${win_odds:.2f}"
+        if place_odds > 20:
+            place_odds_string = f"${place_odds:.0f}"
+        else:
+            place_odds_string = f"${place_odds:.2f}"
+        odds_label = SmallInfoLabel(f"{win_odds_string}\t{place_odds_string}")
+        odds_label.setFixedWidth(screen_width_percentage(0.07))
+        layout.addWidget(
+            odds_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        roi_label = SmallInfoLabel(f"ROI: {selection.roi:.0f}%")
+        roi_label.setFixedWidth(screen_width_percentage(0.052))
+        layout.addWidget(
+            roi_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        def ordinal(n): return "%d%s" % (
+            n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4])
+        prep_label = SmallInfoLabel(
+            f"{ordinal(selection.runs_since_spell + 1)} up")
+        prep_label.setFixedWidth(screen_width_percentage(0.035))
+        layout.addWidget(
+            prep_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        if selection.days_since_last is None or selection.days_since_last == 0:
+            days_since_label = SmallInfoLabel("Unraced")
+        else:
+            days_since_label = SmallInfoLabel(
+                f"{selection.days_since_last} days")
+        days_since_label.setFixedWidth(screen_width_percentage(0.047))
+        layout.addWidget(
+            days_since_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        comment_icon = QtGui.QIcon("icons/comment.png")
+        comment_icon_label = QtWidgets.QLabel()
+        comment_icon_label.setStyleSheet("background-color: transparent;")
+        comment_icon_label.setPixmap(
+            comment_icon.pixmap(screen_height_percentage(0.02),
+                                screen_width_percentage(0.02)))
+        tooltip = ""
+        if selection.comments is not None:
+            tooltip += f"General Comments\n{selection.comments}"
+        for brand, comment in selection.external_comments.items():
+            tooltip += f"\n\n{brand.capitalize()}\n{comment}"
+        comment_icon_label.setToolTip(tooltip)
+        comment_icon_label.setFixedWidth(screen_width_percentage(0.02))
+        layout.addWidget(comment_icon_label)
+
+        gear_icon = QtGui.QIcon("icons/horse_halter.png")
+        gear_icon_label = QtWidgets.QLabel()
+        gear_icon_label.setStyleSheet("background-color: transparent;")
+        gear_icon_label.setPixmap(
+            gear_icon.pixmap(screen_height_percentage(0.022),
+                             screen_width_percentage(0.022)))
+        if selection.gear_changes is None or selection.gear_changes == "":
+            gear_icon_label.setToolTip("No Gear Changes")
+        else:
+            gear_icon_label.setToolTip(selection.gear_changes)
+        gear_icon_label.setFixedWidth(screen_width_percentage(0.022))
+        layout.addWidget(gear_icon_label)
+
         layout.addStretch()
         self.installEventFilter(self)
 
@@ -198,6 +278,11 @@ class SelectionsWidget(QtWidgets.QWidget):
 
     def add_button(self, selection: Selection):
         item = QtWidgets.QTreeWidgetItem()
+        count = self.tree.topLevelItemCount()
+        if count % 2 == 0:
+            item.setBackground(0, QtGui.QColor(84, 104, 122))
+        else:
+            item.setBackground(0, QtGui.QColor(74, 94, 112))
         self.tree.addTopLevelItem(item)
         expand_button = SelectionWidget(selection)
         expand_button.clicked.connect(lambda: self.on_clicked(item))
@@ -326,8 +411,9 @@ class EventNumberWidget(QtWidgets.QWidget):
 
     def button_clicked(self):
         event_parent = self.parent()
-        if event_parent is None:
-            return
+        if type(event_parent) is EventNumbersWidget:
+            event_parent.reset_background()
+        self.setStyleSheet("background-color: #303c46;")
         events_parent = event_parent.parent()
         if type(events_parent) is EventsInfoWidget:
             events_parent.set_tab_index(self.event_number - 1)
@@ -342,8 +428,17 @@ class EventNumbersWidget(QtWidgets.QWidget):
         events_layout.setContentsMargins(0, 0, 0, 0)
         for event in meeting.events:
             event_widget = EventNumberWidget(event)
+            if event.event_number == 1:
+                event_widget.setStyleSheet("background-color: #303c46;")
             events_layout.addWidget(event_widget)
         events_layout.addStretch()
+
+    def reset_background(self):
+        for i in range(self.layout().count()):
+            widget = self.layout().itemAt(i).widget()
+            if widget is None:
+                continue
+            widget.setStyleSheet("background-color: #54687a;")
 
 
 class SelectionGraphWidget(QtWidgets.QWidget):
