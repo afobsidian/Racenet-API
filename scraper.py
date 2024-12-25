@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from api_queries import QueryInfo, QueryRequest, QueryType, FullFormQueryVariables, \
     StatsQueryVariables, EventQueryVariables, MeetingsTimeQueryVariables, \
-    OddsQueryVariables, MeetingSlugQueryVariables
+    OddsQueryVariables, MeetingSlugQueryVariables, SectionalQueryVariables
 
 from meetings_data import Meeting, Jockey, Trainer, Event, Selection, Prediction
 from typing import Optional
@@ -64,6 +64,12 @@ class MeetingsScraper:
             variables=FullFormQueryVariables(
                 selectionIds=selection_ids, limit=10))
         return QueryRequest(query_info=form_query)
+    
+    def create_sectional_query(self, selection_ids: list) -> QueryRequest:
+        sectional_query = QueryInfo(
+            query_type=QueryType.SECTIONAL,
+            variables=SectionalQueryVariables(selectionIds=selection_ids))
+        return QueryRequest(query_info=sectional_query)
 
     def parse_meetings_response(self, response: dict) -> list[str]:
         meetings_data = response.get('data')
@@ -152,7 +158,28 @@ class MeetingsScraper:
             for form in forms_data:
                 for selection in meeting.events[index].selections:
                     if selection.id == form.get('selectionId'):
-                        selection.add_runs(form.get('forms'))
+                        selection.add_runs(form.get('forms', []))
+                        selection.runs.sort(
+                            key=lambda x: datetime.strptime(x.meeting_date, "%Y-%m-%d"), reverse=True)
+
+            selection_ids = []
+            for selection in meeting.events[index].selections:
+                if selection.id != "":
+                    selection_ids.append(selection.id)
+            sectional_query = self.create_sectional_query(selection_ids)
+            sectional_response = sectional_query.send_request()
+            sectional_response_data = sectional_response.get('data')
+            if sectional_response_data is None:
+                continue
+
+            sectionals_data = sectional_response_data.get('competitorForms')
+            if sectionals_data is None:
+                continue
+            for sectional in sectionals_data:
+                for selection in meeting.events[index].selections:
+                    if selection.id == sectional.get('selectionId'):
+                        selection.add_sectional_splits(sectional.get('forms', []))
+
         for index in reversed(delete_events):
             del meeting.events[index]
         if len(meeting.events) == 0:

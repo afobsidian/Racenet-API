@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets, QtGui
 from meetings_data import Meeting, group_by_state, Event, Selection, Run, PositionSummary, \
-    FormBenchmark, Trainer, Jockey, Prediction, Odds, OddsFluctuation
+    FormBenchmark, Trainer, Jockey, Prediction, Odds, OddsFluctuation, Splits
 from scraper import MeetingsScraper
 from datetime import datetime
 import qdarkstyle
@@ -105,6 +105,76 @@ class HorizontalBar(QtWidgets.QFrame):
         self.setFixedWidth(value)
         self.setStyleSheet(
             f"background-color: #00FF00; border-radius: {screen_width_percentage(0.005)}px;")
+        
+class RunsWidget(QtWidgets.QWidget):
+    def __init__(self, run: Run):
+        super(RunsWidget, self).__init__()
+
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        layout.setSpacing(1)
+        layout.setContentsMargins(2, 2, 2, 2)
+
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        if run.is_trial:
+            self.setStyleSheet("background-color: #303c46; color: grey;")
+        else:
+            self.setStyleSheet("background-color: #54687a;")
+
+        finish_pos_label = SmallInfoLabel(f"{run.finish_position} of {run.starters}")
+        finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
+        layout.addWidget(finish_pos_label)
+
+        margin_label = SmallInfoLabel(run.margin)
+        margin_label.setFixedWidth(screen_width_percentage(0.02))
+        layout.addWidget(margin_label)
+
+        venue_label = SmallInfoLabel(run.venue)
+        venue_label.setFixedWidth(screen_width_percentage(0.06))
+        layout.addWidget(venue_label)
+
+        date_label = SmallInfoLabel(run.meeting_date)
+        date_label.setFixedWidth(screen_width_percentage(0.04))
+        layout.addWidget(date_label)
+
+        distance_label = SmallInfoLabel(f"{run.distance}m")
+        distance_label.setFixedWidth(screen_width_percentage(0.03))
+        layout.addWidget(distance_label)
+
+        track_condition_label = SmallInfoLabel(run.track_condition)
+        track_condition_label.setFixedWidth(screen_width_percentage(0.035))
+        layout.addWidget(track_condition_label)
+
+        if not run.is_trial:
+            weight_label = SmallInfoLabel(f"{run.weight}kg")
+            weight_label.setFixedWidth(screen_width_percentage(0.025))
+            layout.addWidget(weight_label)
+
+        jockey_label = SmallInfoLabel("J:" + run.jockey.name)
+        jockey_label.setFixedWidth(screen_width_percentage(0.065))
+        layout.addWidget(jockey_label)
+
+        if not run.is_trial:
+            price_label = SmallInfoLabel(f"{run.open_price}/{run.fluctuation}/{run.starting_price}")
+            price_label.setFixedWidth(screen_width_percentage(0.05))
+            layout.addWidget(price_label)
+
+            class_label = SmallInfoLabel(run._class)
+            class_label.setFixedWidth(screen_width_percentage(0.07))
+            if run.is_class:
+                class_label.setStyleSheet("color: yellow;")
+            layout.addWidget(class_label)
+
+            days_since_label = SmallInfoLabel(f"{run.days_since_last} days")
+            days_since_label.setFixedWidth(screen_width_percentage(0.033))
+            layout.addWidget(days_since_label)
+
+        layout.addStretch()
+        
+        
+        # layout.addWidget(SmallInfoLabel(run.position_summaries))
+        # layout.addWidget(SmallInfoLabel(run.form_benchmark))
+        # layout.addWidget(SmallInfoLabel(run.splits))
 
 
 class SelectionWidget(QtWidgets.QWidget):
@@ -270,10 +340,11 @@ class SelectionsWidget(QtWidgets.QWidget):
     def define_sections(self, selections: list[Selection]):
         for selection in selections:
             widget = QtWidgets.QWidget(self.tree)
-            layout = QtWidgets.QHBoxLayout(widget)
+            layout = QtWidgets.QVBoxLayout(widget)
             widget.setLayout(layout)
-            layout.addWidget(SmallInfoLabel("Bla"))
-            layout.addWidget(SmallInfoLabel("Blubb"))
+            for run in selection.runs[:10]:
+                run_widget = RunsWidget(run)
+                layout.addWidget(run_widget)
             self.sections.append((selection, widget))
 
     def add_button(self, selection: Selection):
@@ -784,8 +855,7 @@ class ScraperTab(QtWidgets.QWidget):
         date_form.addWidget(self.local_checkbox)
 
         meetings_widget = QtWidgets.QWidget()
-        meetings_widget.setMaximumWidth(1000)
-        meetings_widget.setMinimumWidth(1000)
+        meetings_widget.setFixedWidth(screen_width_percentage(0.88))
         meetings_form = QtWidgets.QFormLayout()
         meetings_widget.setLayout(meetings_form)
         # 50% of the screen width
@@ -848,8 +918,7 @@ class ScraperTab(QtWidgets.QWidget):
         for meeting in meetings:
             meeting_name = meeting.name
             button = QtWidgets.QPushButton(meeting_name)
-            button.setMaximumWidth(200)
-            button.setMinimumWidth(200)
+            button.setFixedWidth(screen_width_percentage(0.095))
             button.setCursor(QtGui.QCursor(
                 QtCore.Qt.CursorShape.PointingHandCursor))
             button.clicked.connect(self.open_meeting_window)
@@ -927,7 +996,11 @@ class MeetingScraperApp(QtWidgets.QApplication):
     def run(self, scraper: MeetingsScraper) -> int:
         global SCREEN_SIZE
         SCREEN_SIZE = QtWidgets.QApplication.primaryScreen().size()
+        if SCREEN_SIZE.width() > 1920:
+            SCREEN_SIZE.setWidth(1920)
+        if SCREEN_SIZE.height() > 1080:
+            SCREEN_SIZE.setHeight(1080)
         window = MainWindow(scraper)
-        window.showMaximized()
+        window.show()
 
         return self.exec_()

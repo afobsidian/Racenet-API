@@ -335,6 +335,58 @@ class FormBenchmark:
                 'runnerMeetingPositionL200', "")
         )
 
+@ dataclass
+class Splits:
+    runner_split_l800: float
+    runner_split_l600: float
+    runner_split_l400: float
+    runner_split_l200: float
+    runner_split_finish: float
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Splits':
+        if data is None:
+            return cls(
+                runner_split_l800=0.0,
+                runner_split_l600=0.0,
+                runner_split_l400=0.0,
+                runner_split_l200=0.0,
+                runner_split_finish=0.0
+            )
+        sectional_times = data.get('sectionalTime', {})
+        if sectional_times is None:
+            return cls(
+                runner_split_l800=0.0,
+                runner_split_l600=0.0,
+                runner_split_l400=0.0,
+                runner_split_l200=0.0,
+                runner_split_finish=0.0
+            )
+        
+        l800_data = sectional_times.get('l800', {})
+        l600_data = sectional_times.get('l600', {})
+        l400_data = sectional_times.get('l400', {})
+        l200_data = sectional_times.get('l200', {})
+        finish_data = sectional_times.get('finish', {})
+        if l800_data is None:
+            l800_data = {}
+        if l600_data is None:
+            l600_data = {}
+        if l400_data is None:
+            l400_data = {}
+        if l200_data is None:
+            l200_data = {}
+        if finish_data is None:
+            finish_data = {}
+
+        return cls(
+            runner_split_l800=l800_data.get('split', 0.0),
+            runner_split_l600=l600_data.get('split', 0.0),
+            runner_split_l400=l400_data.get('split', 0.0),
+            runner_split_l200=l200_data.get('split', 0.0),
+            runner_split_finish=finish_data.get('split', 0.0)
+        )
+
 
 @ dataclass
 class PositionSummary:
@@ -393,6 +445,7 @@ class Run:
     finish_time: float
     position_summaries: list[PositionSummary]
     form_benchmark: FormBenchmark
+    splits: Splits
 
     @ classmethod
     def from_dict(cls, data: dict) -> 'Run':
@@ -431,7 +484,8 @@ class Run:
                 l600_time=0.0,
                 finish_time=0.0,
                 position_summaries=[],
-                form_benchmark=FormBenchmark.from_dict({})
+                form_benchmark=FormBenchmark.from_dict({}),
+                splits=Splits.from_dict({})
             )
 
         track_condition_data = data.get('trackCondition', "")
@@ -502,7 +556,7 @@ class Run:
             weight=data.get('weightCarried', 0.0),
             starting_price=data.get('startingWinPriceDecimal', 0.0),
             open_price=data.get('openPrice', 0.0),
-            fluctuation=data.get('fluctuation', 0.0),
+            fluctuation=data.get('fluctuation1', 0.0),
             winner_time=data.get('winnerTime', ""),
             winner_name=data.get('winnerName', ""),
             second_name=data.get('secondName', ""),
@@ -520,7 +574,8 @@ class Run:
             l600_time=l600_time, finish_time=finish_time,
             position_summaries=position_summaries,
             form_benchmark=FormBenchmark.from_dict(
-                data.get('competitorFormBenchmark', {}))
+                data.get('competitorFormBenchmark', {})),
+            splits=Splits.from_dict({})
         )
 
 
@@ -680,9 +735,14 @@ class Selection:
         self.roi = stats.get('roi', 0.0)
 
     def add_odds(self, odds: dict):
-        print(odds)
         self.odds.append(Odds.from_dict(odds))
-        print(self.odds[-1])
+
+    def add_sectional_splits(self, splits: list[dict]):
+        for run in self.runs:
+            for split in splits:
+                if run.id == split.get('id', ""):
+                    run.splits = Splits.from_dict(split)
+                    break
 
 
 @ dataclass

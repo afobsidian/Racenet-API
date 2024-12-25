@@ -2,6 +2,7 @@ import requests
 import json
 from dataclasses import dataclass, field
 from enum import Enum
+import time
 
 BOOKMAKERS = ["racenetstandard"]
 BET_TYPES = ["fixed-win", "fixed-place"]
@@ -17,6 +18,7 @@ class QueryType(Enum):
     STATS = 5
     EVENT = 6
     ODDS = 7
+    SECTIONAL = 8
 
 
 class Variables:
@@ -97,6 +99,17 @@ class FullFormQueryVariables(Variables):
             "selectionIds": self.selectionIds,
             "limit": self.limit
         }
+    
+
+@dataclass
+class SectionalQueryVariables(Variables):
+    selectionIds: list[str]
+    _type: QueryType = QueryType.SECTIONAL
+
+    def get_dict(self):
+        return {
+            "selectionIds": self.selectionIds,
+        }
 
 
 @dataclass
@@ -138,7 +151,8 @@ OPERATION_NAMES = {
     QueryType.MEETING_SLUG: "meetingBySlug",
     QueryType.FULL_FORM: "fullFormsBySelectionIds",
     QueryType.STATS: "statsByEventId",
-    QueryType.EVENT: "eventById"
+    QueryType.EVENT: "eventById",
+    QueryType.SECTIONAL: "getSectionalsBySelectionIds"
 }
 
 QUERY_HASHES = {
@@ -148,7 +162,8 @@ QUERY_HASHES = {
     QueryType.MEETING_SLUG: "6d11913e7745daf6e5c2de9a5b72d7ad5a4f1ea82ad400832a198fe20fd2b2d2",
     QueryType.FULL_FORM: "1093c7bd100804b3372236e69b6da0549161408ca5ec53d5d72d1e2bc33eaaf1",
     QueryType.STATS: "388a5fa2d209f3f5a9c78c5cee87d5a4f9cbc1942c25a7f12f67036d79ab2a73",
-    QueryType.EVENT: "0029451798d3780a964eef179e79ddad1f1074c93038774ec8626b8b22999e6d"
+    QueryType.EVENT: "0029451798d3780a964eef179e79ddad1f1074c93038774ec8626b8b22999e6d",
+    QueryType.SECTIONAL: "30fdad94a3a7256f1a98b824e58a3894cf605f6d87b8d611e62014db1d1be937"
 }
 
 
@@ -229,8 +244,10 @@ class QueryRequest:
             params=self.query_info.get_query_params()
         )
         if response.status_code != 200:
-            print("Request failed. Retrying...")
-            self.send_request()
+            print("Request failed")
+            print(response)
+            time.sleep(5)
+            return self.send_request()
 
         try:
             return response.json()
