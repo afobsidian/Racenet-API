@@ -167,20 +167,19 @@ class SectionalWidget(QtWidgets.QWidget):
         layout.setSpacing(0)
         layout.setContentsMargins(0, 0, 0, 0)
         self.setStyleSheet("background-color: transparent;")
-        if benchmark is not None and race_rank != 0 and meeting_rank != 0:
-            score = 0
-            if benchmark < -1.5:
-                score += 1
-            if race_rank == 1:
-                score += 1
-            if meeting_rank < 5:
-                score += 1
-            if score == 3:
-                self.setStyleSheet(self.styleSheet() + "color: #d503ff;")
-            elif score == 2:
-                self.setStyleSheet(self.styleSheet() + "color: red;")
-            elif score == 1:
-                self.setStyleSheet(self.styleSheet() + "color: orange;")
+        score = 0
+        if benchmark is not None and benchmark <= -1.5:
+            score += 1
+        if race_rank == 1:
+            score += 1
+        if meeting_rank != 0 and meeting_rank <= 5:
+            score += 1
+        if score == 3:
+            self.setStyleSheet(self.styleSheet() + "color: #d503ff;")
+        elif score == 2:
+            self.setStyleSheet(self.styleSheet() + "color: red;")
+        elif score == 1:
+            self.setStyleSheet(self.styleSheet() + "color: orange;")
         if benchmark is not None:
             label_text = f"{benchmark:.1f}"
         else:
@@ -249,7 +248,7 @@ class RunsWidget(QtWidgets.QWidget):
         layout.addWidget(date_label)
 
         distance_label = SmallInfoLabel(f"{run.distance}m")
-        distance_label.setFixedWidth(screen_width_percentage(0.03))
+        distance_label.setFixedWidth(screen_width_percentage(0.028))
         layout.addWidget(distance_label)
 
         track_condition_label = SmallInfoLabel(run.track_condition)
@@ -276,7 +275,7 @@ class RunsWidget(QtWidgets.QWidget):
                 price_label = SmallInfoLabel(f"${run.open_price}/${run.starting_price}")
             else:
                 price_label = SmallInfoLabel(f"${run.open_price}/${run.fluctuation}/${run.starting_price}")
-            price_label.setFixedWidth(screen_width_percentage(0.045))
+            price_label.setFixedWidth(screen_width_percentage(0.05))
             layout.addWidget(price_label)
 
             class_text = run._class[:19]
@@ -298,8 +297,9 @@ class RunsWidget(QtWidgets.QWidget):
             l800_position = 0
             for position_summary in run.position_summaries:
                 if position_summary.distance == 800:
-                    l800_position = position_summary.position
-                    break
+                    if position_summary.position is not None:
+                        l800_position = position_summary.position
+                        break
             l800_sectional_label = SectionalWidget(
                 l800_sectional, run.form_benchmark.runner_time_difference_l800, 
                 run.form_benchmark.runner_race_position_l800, 
@@ -313,8 +313,9 @@ class RunsWidget(QtWidgets.QWidget):
             l600_position = 0
             for position_summary in run.position_summaries:
                 if position_summary.distance == 600:
-                    l600_position = position_summary.position
-                    break
+                    if position_summary.position is not None:
+                        l600_position = position_summary.position
+                        break
 
             l600_sectional_label = SectionalWidget(
                 l600_sectional, run.form_benchmark.runner_time_difference_l600, 
@@ -328,8 +329,9 @@ class RunsWidget(QtWidgets.QWidget):
             l400_position = 0
             for position_summary in run.position_summaries:
                 if position_summary.distance == 400:
-                    l400_position = position_summary.position
-                    break
+                    if position_summary.position is not None:
+                        l400_position = position_summary.position
+                        break
             l400_sectional_label = SectionalWidget(
                 l400_sectional, run.form_benchmark.runner_time_difference_l400, 
                 run.form_benchmark.runner_race_position_l400,
@@ -342,8 +344,9 @@ class RunsWidget(QtWidgets.QWidget):
             l200_position = 0
             for position_summary in run.position_summaries:
                 if position_summary.distance == 200:
-                    l200_position = position_summary.position
-                    break
+                    if position_summary.position is not None:
+                        l200_position = position_summary.position
+                        break
             l200_sectional_label = SectionalWidget(
                 l200_sectional, run.form_benchmark.runner_time_difference_l200, 
                 run.form_benchmark.runner_race_position_l200,
