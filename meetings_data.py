@@ -190,7 +190,7 @@ class Jockey:
         return cls(
             id=data.get('id', 0),
             name=data.get('name', ""),
-            last_year_runs=stats.get('lastYearRuns', 0),
+            last_year_runs=last_year_runs,
             last_year_win_percentage=last_year_win_percentage,
             last_year_place_percentage=last_year_place_percentage
         )
@@ -258,81 +258,176 @@ class Trainer:
 
 @ dataclass
 class FormBenchmark:
-    runner_tempo_quantile_rank: str
+    runner_tempo_quantile_rank: Optional[float]
     runner_tempo_label: str
-    runner_tempo_difference: str
+    runner_tempo_difference: Optional[float]
     leader_tempo_label: str
-    leader_tempo_difference: str
-    runner_time_difference: str
+    leader_tempo_difference: Optional[float]
+    runner_time_difference: Optional[float]
     winner_time_label: str
-    winner_time_difference: str
-    runner_time_difference_l800: str
-    runner_time_difference_l600: str
-    runner_time_difference_l400: str
-    runner_time_difference_l200: str
-    runner_race_position_l800: str
-    runner_race_position_l600: str
-    runner_race_position_l400: str
-    runner_race_position_l200: str
-    runner_meeting_position_l800: str
-    runner_meeting_position_l600: str
-    runner_meeting_position_l400: str
-    runner_meeting_position_l200: str
+    winner_time_difference: Optional[float]
+    runner_time_difference_l800: Optional[float]
+    runner_time_difference_l600: Optional[float]
+    runner_time_difference_l400: Optional[float]
+    runner_time_difference_l200: Optional[float]
+    runner_race_position_l800: int
+    runner_race_position_l600: int
+    runner_race_position_l400: int
+    runner_race_position_l200: int
+    runner_meeting_position_l800: int
+    runner_meeting_position_l600: int
+    runner_meeting_position_l400: int
+    runner_meeting_position_l200: int
 
     @ classmethod
     def from_dict(cls, data: dict) -> 'FormBenchmark':
         if data is None:
             return cls(
-                runner_tempo_quantile_rank="",
+                runner_tempo_quantile_rank=None,
                 runner_tempo_label="",
-                runner_tempo_difference="",
+                runner_tempo_difference=None,
                 leader_tempo_label="",
-                leader_tempo_difference="",
-                runner_time_difference="",
+                leader_tempo_difference=None,
+                runner_time_difference=None,
                 winner_time_label="",
-                winner_time_difference="",
-                runner_time_difference_l800="",
-                runner_time_difference_l600="",
-                runner_time_difference_l400="",
-                runner_time_difference_l200="",
-                runner_race_position_l800="",
-                runner_race_position_l600="",
-                runner_race_position_l400="",
-                runner_race_position_l200="",
-                runner_meeting_position_l800="",
-                runner_meeting_position_l600="",
-                runner_meeting_position_l400="",
-                runner_meeting_position_l200=""
+                winner_time_difference=None,
+                runner_time_difference_l800=None,
+                runner_time_difference_l600=None,
+                runner_time_difference_l400=None,
+                runner_time_difference_l200=None,
+                runner_race_position_l800=0,
+                runner_race_position_l600=0,
+                runner_race_position_l400=0,
+                runner_race_position_l200=0,
+                runner_meeting_position_l800=0,
+                runner_meeting_position_l600=0,
+                runner_meeting_position_l400=0,
+                runner_meeting_position_l200=0
             )
+        runner_tempo_quantile_rank_data = data.get('runnerTempoQuantileRank')
+        if runner_tempo_quantile_rank_data == None:
+            runner_tempo_quantile_rank = None
+        else:
+            runner_tempo_quantile_rank = float(runner_tempo_quantile_rank_data)
+
+        runner_tempo_difference_data = data.get('runnerTempoDifference')
+        if runner_tempo_difference_data == None:
+            runner_tempo_difference = None
+        else:
+            runner_tempo_difference = float(runner_tempo_difference_data)
+
+        leader_tempo_difference_data = data.get('leaderTempoDifference')
+        if leader_tempo_difference_data == None:
+            leader_tempo_difference = None
+        else:
+            leader_tempo_difference = float(leader_tempo_difference_data)
+
+        runner_time_difference_data = data.get('runnerTimeDifference')
+        if runner_time_difference_data == None:
+            runner_time_difference = None
+        else:
+            runner_time_difference = float(runner_time_difference_data)
+
+        winner_time_difference_data = data.get('winnerTimeDifference')
+        if winner_time_difference_data == None:
+            winner_time_difference = None
+        else:
+            winner_time_difference = float(winner_time_difference_data)
+
+        runner_time_difference_l800_data = data.get('runnerTimeDifferenceL800')
+        if runner_time_difference_l800_data == None:
+            runner_time_difference_l800 = None
+        else:
+            runner_time_difference_l800 = float(runner_time_difference_l800_data)
+
+        runner_time_difference_l600_data = data.get('runnerTimeDifferenceL600')
+        if runner_time_difference_l600_data == None:
+            runner_time_difference_l600 = None
+        else:
+            runner_time_difference_l600 = float(runner_time_difference_l600_data)
+
+        runner_time_difference_l400_data = data.get('runnerTimeDifferenceL400')
+        if runner_time_difference_l400_data == None:
+            runner_time_difference_l400 = None
+        else:
+            runner_time_difference_l400 = float(runner_time_difference_l400_data)
+        
+        runner_time_difference_l200_data = data.get('runnerTimeDifferenceL200')
+        if runner_time_difference_l200_data == None:
+            runner_time_difference_l200 = None
+        else:
+            runner_time_difference_l200 = float(runner_time_difference_l200_data)
+
+        runner_race_position_l800_data = data.get('runnerRacePositionL800')
+        if runner_race_position_l800_data == None:
+            runner_race_position_l800 = 0
+        else:
+            runner_race_position_l800 = int(runner_race_position_l800_data)
+
+        runner_race_position_l600_data = data.get('runnerRacePositionL600')
+        if runner_race_position_l600_data == None:
+            runner_race_position_l600 = 0
+        else:
+            runner_race_position_l600 = int(runner_race_position_l600_data)
+
+        runner_race_position_l400_data = data.get('runnerRacePositionL400')
+        if runner_race_position_l400_data == None:
+            runner_race_position_l400 = 0
+        else:
+            runner_race_position_l400 = int(runner_race_position_l400_data)
+
+        runner_race_position_l200_data = data.get('runnerRacePositionL200')
+        if runner_race_position_l200_data == None:
+            runner_race_position_l200 = 0
+        else:
+            runner_race_position_l200 = int(runner_race_position_l200_data)
+
+        runner_meeting_position_l800_data = data.get('runnerMeetingPositionL800')
+        if runner_meeting_position_l800_data == None:
+            runner_meeting_position_l800 = 0
+        else:
+            runner_meeting_position_l800 = int(runner_meeting_position_l800_data)
+
+        runner_meeting_position_l600_data = data.get('runnerMeetingPositionL600')
+        if runner_meeting_position_l600_data == None:
+            runner_meeting_position_l600 = 0
+        else:
+            runner_meeting_position_l600 = int(runner_meeting_position_l600_data)
+
+        runner_meeting_position_l400_data = data.get('runnerMeetingPositionL400')
+        if runner_meeting_position_l400_data == None:
+            runner_meeting_position_l400 = 0
+        else:
+            runner_meeting_position_l400 = int(runner_meeting_position_l400_data)
+
+        runner_meeting_position_l200_data = data.get('runnerMeetingPositionL200')
+        if runner_meeting_position_l200_data == None:
+            runner_meeting_position_l200 = 0
+        else:
+            runner_meeting_position_l200 = int(runner_meeting_position_l200_data)
+
+        
         return cls(
-            runner_tempo_quantile_rank=data.get('runnerTempoQuantileRank', ""),
+            runner_tempo_quantile_rank=runner_tempo_quantile_rank,
             runner_tempo_label=data.get('runnerTempoLabel', ""),
-            runner_tempo_difference=data.get('runnerTempoDifference', ""),
+            runner_tempo_difference=runner_tempo_difference,
             leader_tempo_label=data.get('leaderTempoLabel', ""),
-            leader_tempo_difference=data.get('leaderTempoDifference', ""),
-            runner_time_difference=data.get('runnerTimeDifference', ""),
+            leader_tempo_difference=leader_tempo_difference,
+            runner_time_difference=runner_time_difference,
             winner_time_label=data.get('winnerTimeLabel', ""),
-            winner_time_difference=data.get('winnerTimeDifference', ""),
-            runner_time_difference_l800=data.get(
-                'runnerTimeDifferenceL800', ""),
-            runner_time_difference_l600=data.get(
-                'runnerTimeDifferenceL600', ""),
-            runner_time_difference_l400=data.get(
-                'runnerTimeDifferenceL400', ""),
-            runner_time_difference_l200=data.get(
-                'runnerTimeDifferenceL200', ""),
-            runner_race_position_l800=data.get('runnerRacePositionL800', ""),
-            runner_race_position_l600=data.get('runnerRacePositionL600', ""),
-            runner_race_position_l400=data.get('runnerRacePositionL400', ""),
-            runner_race_position_l200=data.get('runnerRacePositionL200', ""),
-            runner_meeting_position_l800=data.get(
-                'runnerMeetingPositionL800', ""),
-            runner_meeting_position_l600=data.get(
-                'runnerMeetingPositionL600', ""),
-            runner_meeting_position_l400=data.get(
-                'runnerMeetingPositionL400', ""),
-            runner_meeting_position_l200=data.get(
-                'runnerMeetingPositionL200', "")
+            winner_time_difference=winner_time_difference,
+            runner_time_difference_l800=runner_time_difference_l800,
+            runner_time_difference_l600=runner_time_difference_l600,
+            runner_time_difference_l400=runner_time_difference_l400,
+            runner_time_difference_l200=runner_time_difference_l200,
+            runner_race_position_l800=runner_race_position_l800,
+            runner_race_position_l600=runner_race_position_l600,
+            runner_race_position_l400=runner_race_position_l400,
+            runner_race_position_l200=runner_race_position_l200,
+            runner_meeting_position_l800=runner_meeting_position_l800,
+            runner_meeting_position_l600=runner_meeting_position_l600,
+            runner_meeting_position_l400=runner_meeting_position_l400,
+            runner_meeting_position_l200=runner_meeting_position_l200
         )
 
 @ dataclass
@@ -588,8 +683,8 @@ class Selection:
     barrier: int
     gear_changes: str
     comments: str
-    weight: int
-    claim: int
+    weight: float
+    claim: float
     punters_edge: float
     prediction: Prediction
     jockey: Jockey
@@ -619,8 +714,8 @@ class Selection:
                 barrier=0,
                 gear_changes="",
                 comments="",
-                weight=0,
-                claim=0,
+                weight=0.0,
+                claim=0.0,
                 punters_edge=0.0,
                 prediction=Prediction.from_dict({}),
                 jockey=Jockey.from_dict({}),
@@ -661,6 +756,19 @@ class Selection:
             text = comment.get('comments', "")
             external_comments[brand] = text
 
+        weight_data = data.get('weight', 0)
+        if weight_data == None:
+            weight = 0
+        else:
+            weight = float(weight_data)
+
+        claim_data = data.get('jockeyWeightClaim', 0)
+        if claim_data == None:
+            claim = 0
+        else:
+            claim = float(claim_data)
+
+
         return cls(
             id=data.get('id', ""),
             name=name,
@@ -669,8 +777,8 @@ class Selection:
             barrier=data.get('barrierNumber', 0),
             gear_changes=data.get('gearChanges', ""),
             comments=data.get('comments', ""),
-            weight=data.get('weight', 0),
-            claim=data.get('jockeyWeightClaim', 0),
+            weight=weight,
+            claim=claim,
             punters_edge=punters_edge,
             prediction=Prediction.from_dict(data.get('prediction', {})),
             jockey=Jockey.from_dict(data.get('jockey', {})),

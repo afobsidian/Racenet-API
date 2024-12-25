@@ -7,8 +7,9 @@ from scraper import MeetingsScraper
 from datetime import datetime
 import qdarkstyle
 import sys
-from typing import Union
+from typing import Union, Optional
 from numerize import numerize
+from difflib import SequenceMatcher
 
 SCREEN_SIZE = QtCore.QSize()
 FONT = "Helvetica"
@@ -106,8 +107,118 @@ class HorizontalBar(QtWidgets.QFrame):
         self.setStyleSheet(
             f"background-color: #00FF00; border-radius: {screen_width_percentage(0.005)}px;")
         
+class TempoWidget(QtWidgets.QWidget):
+    def __init__(self, benchmark: Optional[float], label: str):
+        super(TempoWidget, self).__init__()
+        self.benchmark = benchmark
+        self.tempo_label = label
+        self.displaying_benchmark = True
+
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        if benchmark is not None:
+            label_text = f"{benchmark:.2f}"
+        else:
+            label_text = " - "
+        self.label = SmallInfoLabel(label_text)
+        if label is not None:
+            if "fast" in label.lower():
+                self.label.setStyleSheet("color: lightgreen;")
+            elif "slow" in label.lower():
+                self.label.setStyleSheet("color: red;")
+
+        layout.addWidget(self.label)
+        self.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.Type.MouseButtonPress and \
+                event.button() == QtCore.Qt.MouseButton.LeftButton:
+            if self.displaying_benchmark:
+                if self.tempo_label is None or self.tempo_label == "":
+                    self.label.setText(" -- ")
+                else:
+                    self.label.setText(self.tempo_label)
+                self.displaying_benchmark = False
+            else:
+                if self.benchmark is not None:
+                    label_text = f"{self.benchmark:.2f}"
+                else:
+                    label_text = " - "
+                self.label.setText(label_text)
+                self.displaying_benchmark = True
+        return False
+        
+class SectionalWidget(QtWidgets.QWidget):
+    def __init__(
+            self, sectional: Union[str, float], benchmark: Optional[float], race_rank: int,
+            meeting_rank: int, position: int):
+        super(SectionalWidget, self).__init__()
+        self.sectional = sectional
+        self.benchmark = benchmark
+        self.race_rank = race_rank
+        self.meeting_rank = meeting_rank
+        self.position = position
+        self.displaying_benchmark = True
+
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setStyleSheet("background-color: transparent;")
+        if benchmark is not None and race_rank != 0 and meeting_rank != 0:
+            score = 0
+            if benchmark < -1.5:
+                score += 1
+            if race_rank == 1:
+                score += 1
+            if meeting_rank < 5:
+                score += 1
+            if score == 3:
+                self.setStyleSheet(self.styleSheet() + "color: #d503ff;")
+            elif score == 2:
+                self.setStyleSheet(self.styleSheet() + "color: red;")
+            elif score == 1:
+                self.setStyleSheet(self.styleSheet() + "color: orange;")
+        if benchmark is not None:
+            label_text = f"{benchmark:.1f}"
+        else:
+            label_text = " - "
+        if position != 0:
+            label_text += f" [{position}]"
+        self.label = SmallInfoLabel(label_text)
+        layout.addWidget(self.label)
+        self.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.Type.MouseButtonPress and \
+                event.button() == QtCore.Qt.MouseButton.LeftButton:
+            if self.displaying_benchmark:
+                if type(self.sectional) is float:
+                    minutes, seconds = divmod(self.sectional, 60)
+                    label_text = ""
+                    if minutes > 0:
+                        label_text += f"{minutes:.0f}:"
+                    label_text += f"{seconds:.2f}"
+                else:
+                    label_text = self.sectional
+                self.displaying_benchmark = False
+            else:
+                if self.benchmark is not None:
+                    label_text = f"{self.benchmark:.1f}"
+                else:
+                    label_text = " - "
+                self.displaying_benchmark = True
+            if self.position != 0:
+                label_text += f" [{self.position}]"
+            self.label.setText(label_text)
+            return True
+        return False
+        
+        
 class RunsWidget(QtWidgets.QWidget):
-    def __init__(self, run: Run):
+    def __init__(self, run: Run, weight: float):
         super(RunsWidget, self).__init__()
 
         layout = QtWidgets.QHBoxLayout()
@@ -119,7 +230,7 @@ class RunsWidget(QtWidgets.QWidget):
         if run.is_trial:
             self.setStyleSheet("background-color: #303c46; color: grey;")
         else:
-            self.setStyleSheet("background-color: #54687a;")
+            self.setStyleSheet("background-color: #444630;")
 
         finish_pos_label = SmallInfoLabel(f"{run.finish_position} of {run.starters}")
         finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
@@ -147,6 +258,12 @@ class RunsWidget(QtWidgets.QWidget):
 
         if not run.is_trial:
             weight_label = SmallInfoLabel(f"{run.weight}kg")
+            if run.weight - weight >= 6:
+                weight_label.setStyleSheet("color: #d503ff;")
+            elif run.weight - weight >= 4:
+                weight_label.setStyleSheet("color: red;")
+            elif run.weight - weight >= 2:
+                weight_label.setStyleSheet("color: orange;")
             weight_label.setFixedWidth(screen_width_percentage(0.025))
             layout.addWidget(weight_label)
 
@@ -155,32 +272,134 @@ class RunsWidget(QtWidgets.QWidget):
         layout.addWidget(jockey_label)
 
         if not run.is_trial:
-            price_label = SmallInfoLabel(f"{run.open_price}/{run.fluctuation}/{run.starting_price}")
-            price_label.setFixedWidth(screen_width_percentage(0.05))
+            if run.fluctuation is None:
+                price_label = SmallInfoLabel(f"${run.open_price}/${run.starting_price}")
+            else:
+                price_label = SmallInfoLabel(f"${run.open_price}/${run.fluctuation}/${run.starting_price}")
+            price_label.setFixedWidth(screen_width_percentage(0.045))
             layout.addWidget(price_label)
 
-            class_label = SmallInfoLabel(run._class)
-            class_label.setFixedWidth(screen_width_percentage(0.07))
+            class_text = run._class[:19]
+            class_label = SmallInfoLabel(class_text)
+            class_label.setFixedWidth(screen_width_percentage(0.075))
             if run.is_class:
                 class_label.setStyleSheet("color: yellow;")
             layout.addWidget(class_label)
 
             days_since_label = SmallInfoLabel(f"{run.days_since_last} days")
-            days_since_label.setFixedWidth(screen_width_percentage(0.033))
+            days_since_label.setFixedWidth(screen_width_percentage(0.035))
             layout.addWidget(days_since_label)
+            layout.addSpacerItem(QtWidgets.QSpacerItem(2, 0))
+
+        if not run.is_trial:
+
+            l800_sectional = run.splits.runner_split_l600 + run.splits.runner_split_l400 + \
+                run.splits.runner_split_l200 + run.splits.runner_split_finish
+            l800_position = 0
+            for position_summary in run.position_summaries:
+                if position_summary.distance == 800:
+                    l800_position = position_summary.position
+                    break
+            l800_sectional_label = SectionalWidget(
+                l800_sectional, run.form_benchmark.runner_time_difference_l800, 
+                run.form_benchmark.runner_race_position_l800, 
+                run.form_benchmark.runner_meeting_position_l800,
+                l800_position)
+            l800_sectional_label.setFixedWidth(screen_width_percentage(0.035))
+            layout.addWidget(l800_sectional_label)
+
+            l600_sectional = run.splits.runner_split_l400 + run.splits.runner_split_l200 + \
+                run.splits.runner_split_finish
+            l600_position = 0
+            for position_summary in run.position_summaries:
+                if position_summary.distance == 600:
+                    l600_position = position_summary.position
+                    break
+
+            l600_sectional_label = SectionalWidget(
+                l600_sectional, run.form_benchmark.runner_time_difference_l600, 
+                run.form_benchmark.runner_race_position_l600,
+                run.form_benchmark.runner_meeting_position_l600,
+                l600_position)
+            l600_sectional_label.setFixedWidth(screen_width_percentage(0.035))
+            layout.addWidget(l600_sectional_label)
+
+            l400_sectional = run.splits.runner_split_l200 + run.splits.runner_split_finish
+            l400_position = 0
+            for position_summary in run.position_summaries:
+                if position_summary.distance == 400:
+                    l400_position = position_summary.position
+                    break
+            l400_sectional_label = SectionalWidget(
+                l400_sectional, run.form_benchmark.runner_time_difference_l400, 
+                run.form_benchmark.runner_race_position_l400,
+                run.form_benchmark.runner_meeting_position_l400,
+                l400_position)
+            l400_sectional_label.setFixedWidth(screen_width_percentage(0.035))
+            layout.addWidget(l400_sectional_label)
+
+            l200_sectional = run.splits.runner_split_finish
+            l200_position = 0
+            for position_summary in run.position_summaries:
+                if position_summary.distance == 200:
+                    l200_position = position_summary.position
+                    break
+            l200_sectional_label = SectionalWidget(
+                l200_sectional, run.form_benchmark.runner_time_difference_l200, 
+                run.form_benchmark.runner_race_position_l200,
+                run.form_benchmark.runner_meeting_position_l200,
+                l200_position)
+            l200_sectional_label.setFixedWidth(screen_width_percentage(0.025))
+            layout.addWidget(l200_sectional_label)
+
+            overall_time_label = SectionalWidget(
+                run.finish_time, run.form_benchmark.runner_time_difference, 0, 0,
+                run.finish_position)
+            overall_time_label.setFixedWidth(screen_width_percentage(0.04))
+            layout.addWidget(overall_time_label)
+
+            run.winner_time = run.winner_time[:-1]
+            if run.winner_time[0] == "0":
+                run.winner_time = run.winner_time[1:]
+            winner_time_label = SectionalWidget(
+                run.winner_time, run.form_benchmark.winner_time_difference, 0, 0, 0)
+            winner_time_label.setFixedWidth(screen_width_percentage(0.03))
+            layout.addWidget(winner_time_label)
+
+            runner_tempo_label = TempoWidget(
+                    run.form_benchmark.runner_tempo_difference,
+                    run.form_benchmark.runner_tempo_label)
+            runner_tempo_label.setFixedWidth(screen_width_percentage(0.028))
+            layout.addWidget(runner_tempo_label)
+
+            winner_tempo_label = TempoWidget(
+                    run.form_benchmark.leader_tempo_difference,
+                    run.form_benchmark.leader_tempo_label)
+            winner_tempo_label.setFixedWidth(screen_width_percentage(0.028))
+            layout.addWidget(winner_tempo_label)
+
+            comment_icon = QtGui.QIcon("icons/comment.png")
+            comment_icon_label = QtWidgets.QLabel()
+            comment_icon_label.setStyleSheet("background-color: transparent;")
+            comment_icon_label.setPixmap(
+                comment_icon.pixmap(screen_height_percentage(0.02),
+                                    screen_width_percentage(0.02)))
+            tooltip = ""
+            if run.video_comment is not None:
+                tooltip += f"Video Comment\n{run.video_comment}"
+            if run.video_note is not None:
+                tooltip += f"\n\nVideo Note\n{run.video_note}"
+            comment_icon_label.setToolTip(tooltip)
+            comment_icon_label.setFixedWidth(screen_width_percentage(0.02))
+            layout.addWidget(comment_icon_label)
 
         layout.addStretch()
-        
-        
-        # layout.addWidget(SmallInfoLabel(run.position_summaries))
-        # layout.addWidget(SmallInfoLabel(run.form_benchmark))
-        # layout.addWidget(SmallInfoLabel(run.splits))
 
 
 class SelectionWidget(QtWidgets.QWidget):
     clicked = QtCore.Signal()
 
-    def __init__(self, selection: Selection):
+    def __init__(self, selection: Selection, venue: str):
         super(SelectionWidget, self).__init__()
         self.selection = selection
         layout = QtWidgets.QHBoxLayout()
@@ -192,7 +411,7 @@ class SelectionWidget(QtWidgets.QWidget):
         name_label.setFixedWidth(screen_width_percentage(0.15))
         layout.addWidget(name_label)
         weight_string = f"{selection.weight}kg"
-        if selection.claim is not None:
+        if selection.claim != 0:
             weight_string += f" (a{selection.claim})"
         runs_widget = SmallInfoLabel(
             f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}")
@@ -209,12 +428,24 @@ class SelectionWidget(QtWidgets.QWidget):
         layout.addWidget(
             barrier_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
-        trainer_label = SmallInfoLabel("T: " + selection.trainer.name)
-        trainer_label.setFixedWidth(screen_width_percentage(0.09))
+        trainer_label_text = "T: " + selection.trainer.name
+        if selection.trainer.location is not None:
+            match_ratio = SequenceMatcher(
+                None, selection.trainer.location, venue).ratio()
+            if match_ratio > 0.8:
+                trainer_label_text += " [H]"
+        trainer_label = SmallInfoLabel(trainer_label_text)
+        if selection.trainer.last_year_win_percentage is not None and \
+                selection.trainer.last_year_win_percentage >= 0.17:
+            trainer_label.setStyleSheet(trainer_label.styleSheet() + "color: orange;")
+        trainer_label.setFixedWidth(screen_width_percentage(0.1))
         layout.addWidget(
             trainer_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
         jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
+        if selection.jockey.last_year_win_percentage is not None and \
+                selection.jockey.last_year_win_percentage >= 0.12:
+            jockey_label.setStyleSheet(jockey_label.styleSheet() + "color: orange;")
         jockey_label.setFixedWidth(screen_width_percentage(0.09))
         layout.addWidget(
             jockey_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -254,6 +485,8 @@ class SelectionWidget(QtWidgets.QWidget):
             odds_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
         roi_label = SmallInfoLabel(f"ROI: {selection.roi:.0f}%")
+        if selection.roi > 0:
+            roi_label.setStyleSheet(roi_label.styleSheet() + "color: orange;")
         roi_label.setFixedWidth(screen_width_percentage(0.052))
         layout.addWidget(
             roi_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -313,7 +546,7 @@ class SelectionWidget(QtWidgets.QWidget):
 
 
 class SelectionsWidget(QtWidgets.QWidget):
-    def __init__(self, selections: list[Selection]):
+    def __init__(self, selections: list[Selection], venue: str):
         super(SelectionsWidget, self).__init__()
         self.setContentsMargins(0, 0, 0, 0)
         self.setFixedHeight(screen_height_percentage(0.69))
@@ -329,11 +562,11 @@ class SelectionsWidget(QtWidgets.QWidget):
 
         self.sections: list[tuple[Selection, QtWidgets.QWidget]] = []
         self.define_sections(selections)
-        self.add_sections()
+        self.add_sections(venue)
 
-    def add_sections(self):
+    def add_sections(self, venue: str):
         for (selection, widget) in self.sections:
-            button1 = self.add_button(selection)
+            button1 = self.add_button(selection, venue)
             section1 = self.add_widget(button1, widget)
             button1.addChild(section1)
 
@@ -343,11 +576,11 @@ class SelectionsWidget(QtWidgets.QWidget):
             layout = QtWidgets.QVBoxLayout(widget)
             widget.setLayout(layout)
             for run in selection.runs[:10]:
-                run_widget = RunsWidget(run)
+                run_widget = RunsWidget(run, selection.weight - selection.claim)
                 layout.addWidget(run_widget)
             self.sections.append((selection, widget))
 
-    def add_button(self, selection: Selection):
+    def add_button(self, selection: Selection, venue: str):
         item = QtWidgets.QTreeWidgetItem()
         count = self.tree.topLevelItemCount()
         if count % 2 == 0:
@@ -355,7 +588,7 @@ class SelectionsWidget(QtWidgets.QWidget):
         else:
             item.setBackground(0, QtGui.QColor(74, 94, 112))
         self.tree.addTopLevelItem(item)
-        expand_button = SelectionWidget(selection)
+        expand_button = SelectionWidget(selection, venue)
         expand_button.clicked.connect(lambda: self.on_clicked(item))
         self.tree.setItemWidget(item, 0, expand_button)
         return item
@@ -433,7 +666,7 @@ class EventInfoWidget(QtWidgets.QWidget):
 
 
 class EventWidget(QtWidgets.QWidget):
-    def __init__(self, event: Event):
+    def __init__(self, event: Event, venue: str):
         super(EventWidget, self).__init__()
 
         layout = QtWidgets.QVBoxLayout()
@@ -441,7 +674,7 @@ class EventWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(EventInfoWidget(event), 0)
         layout.addWidget(
-            SelectionsWidget(event.selections), 1,
+            SelectionsWidget(event.selections, venue), 1,
             alignment=QtCore.Qt.AlignmentFlag.AlignTop)
 
 
@@ -451,7 +684,7 @@ class EventsTabWidget(QtWidgets.QTabWidget):
         self.tabBar().hide()
         self.setContentsMargins(0, 0, 0, 0)
         for event in meeting.events:
-            event_widget = EventWidget(event)
+            event_widget = EventWidget(event, meeting.name)
             self.addTab(event_widget, event.name)
 
 
