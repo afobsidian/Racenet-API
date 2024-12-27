@@ -10,6 +10,7 @@ import sys
 from typing import Union, Optional
 from numerize import numerize
 from difflib import SequenceMatcher
+from textwrap import shorten
 
 SCREEN_SIZE = QtCore.QSize()
 FONT = "Helvetica"
@@ -386,11 +387,11 @@ class RunsWidget(QtWidgets.QWidget):
             price_label.setFixedWidth(screen_width_percentage(0.051))
             layout.addWidget(price_label)
 
-            class_text = run._class[:19]
+            class_text = run._class[:17]
             class_label = SmallInfoLabel(class_text)
-            class_label.setFixedWidth(screen_width_percentage(0.076))
             if run.is_class:
                 class_label.setStyleSheet("color: yellow;")
+            class_label.setFixedWidth(screen_width_percentage(0.076))
             layout.addWidget(class_label)
 
             days_since_label = SmallInfoLabel(f"{run.days_since_last} days")
