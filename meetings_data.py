@@ -102,7 +102,7 @@ class Odds:
             fluctuations=fluctuations)
 
 
-@ dataclass
+@dataclass
 class Prediction:
     normalized_speed: float
     normalized_speed_position: str
@@ -112,7 +112,7 @@ class Prediction:
     speed: float
     finish_speed: float
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Prediction':
         if data is None:
             return cls(
@@ -139,7 +139,7 @@ class Prediction:
         )
 
 
-@ dataclass
+@dataclass
 class Jockey:
     id: int
     name: str
@@ -147,7 +147,7 @@ class Jockey:
     last_year_win_percentage: float
     last_year_place_percentage: float
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Jockey':
         if data is None:
             return cls(
@@ -196,7 +196,7 @@ class Jockey:
         )
 
 
-@ dataclass
+@dataclass
 class Trainer:
     id: int
     name: str
@@ -205,7 +205,7 @@ class Trainer:
     last_year_win_percentage: float
     last_year_place_percentage: float
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Trainer':
         if data is None:
             return cls(
@@ -256,7 +256,7 @@ class Trainer:
         )
 
 
-@ dataclass
+@dataclass
 class FormBenchmark:
     runner_tempo_quantile_rank: Optional[float]
     runner_tempo_label: str
@@ -279,7 +279,7 @@ class FormBenchmark:
     runner_meeting_position_l400: int
     runner_meeting_position_l200: int
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'FormBenchmark':
         if data is None:
             return cls(
@@ -307,106 +307,117 @@ class FormBenchmark:
         runner_tempo_quantile_rank_data = data.get('runnerTempoQuantileRank')
         if runner_tempo_quantile_rank_data == None:
             runner_tempo_quantile_rank = None
-        else:
+        elif type(runner_tempo_quantile_rank_data) == str:
             runner_tempo_quantile_rank = float(runner_tempo_quantile_rank_data)
 
         runner_tempo_difference_data = data.get('runnerTempoDifference')
         if runner_tempo_difference_data == None:
             runner_tempo_difference = None
-        else:
+        elif type(runner_tempo_difference_data) == str:
             runner_tempo_difference = float(runner_tempo_difference_data)
 
         leader_tempo_difference_data = data.get('leaderTempoDifference')
         if leader_tempo_difference_data == None:
             leader_tempo_difference = None
-        else:
+        elif type(leader_tempo_difference_data) == str:
             leader_tempo_difference = float(leader_tempo_difference_data)
 
         runner_time_difference_data = data.get('runnerTimeDifference')
         if runner_time_difference_data == None:
             runner_time_difference = None
-        else:
+        elif type(runner_time_difference_data) == str:
             runner_time_difference = float(runner_time_difference_data)
 
         winner_time_difference_data = data.get('winnerTimeDifference')
         if winner_time_difference_data == None:
             winner_time_difference = None
-        else:
+        elif type(winner_time_difference_data) == str:
             winner_time_difference = float(winner_time_difference_data)
 
         runner_time_difference_l800_data = data.get('runnerTimeDifferenceL800')
         if runner_time_difference_l800_data == None:
             runner_time_difference_l800 = None
-        else:
-            runner_time_difference_l800 = float(runner_time_difference_l800_data)
+        elif type(runner_time_difference_l800_data) == str:
+            runner_time_difference_l800 = float(
+                runner_time_difference_l800_data)
 
         runner_time_difference_l600_data = data.get('runnerTimeDifferenceL600')
         if runner_time_difference_l600_data == None:
             runner_time_difference_l600 = None
-        else:
-            runner_time_difference_l600 = float(runner_time_difference_l600_data)
+        elif type(runner_time_difference_l600_data) == str:
+            runner_time_difference_l600 = float(
+                runner_time_difference_l600_data)
 
         runner_time_difference_l400_data = data.get('runnerTimeDifferenceL400')
         if runner_time_difference_l400_data == None:
             runner_time_difference_l400 = None
-        else:
-            runner_time_difference_l400 = float(runner_time_difference_l400_data)
-        
+        elif type(runner_time_difference_l400_data) == str:
+            runner_time_difference_l400 = float(
+                runner_time_difference_l400_data)
+
         runner_time_difference_l200_data = data.get('runnerTimeDifferenceL200')
         if runner_time_difference_l200_data == None:
             runner_time_difference_l200 = None
-        else:
-            runner_time_difference_l200 = float(runner_time_difference_l200_data)
+        elif type(runner_time_difference_l200_data) == str:
+            runner_time_difference_l200 = float(
+                runner_time_difference_l200_data)
 
         runner_race_position_l800_data = data.get('runnerRacePositionL800')
         if runner_race_position_l800_data == None:
             runner_race_position_l800 = 0
-        else:
+        elif type(runner_race_position_l800_data) == str:
             runner_race_position_l800 = int(runner_race_position_l800_data)
 
         runner_race_position_l600_data = data.get('runnerRacePositionL600')
         if runner_race_position_l600_data == None:
             runner_race_position_l600 = 0
-        else:
+        elif type(runner_race_position_l600_data) == str:
             runner_race_position_l600 = int(runner_race_position_l600_data)
 
         runner_race_position_l400_data = data.get('runnerRacePositionL400')
         if runner_race_position_l400_data == None:
             runner_race_position_l400 = 0
-        else:
+        elif type(runner_race_position_l400_data) == str:
             runner_race_position_l400 = int(runner_race_position_l400_data)
 
         runner_race_position_l200_data = data.get('runnerRacePositionL200')
         if runner_race_position_l200_data == None:
             runner_race_position_l200 = 0
-        else:
+        elif type(runner_race_position_l200_data) == str:
             runner_race_position_l200 = int(runner_race_position_l200_data)
 
-        runner_meeting_position_l800_data = data.get('runnerMeetingPositionL800')
+        runner_meeting_position_l800_data = data.get(
+            'runnerMeetingPositionL800')
         if runner_meeting_position_l800_data == None:
             runner_meeting_position_l800 = 0
-        else:
-            runner_meeting_position_l800 = int(runner_meeting_position_l800_data)
+        elif type(runner_meeting_position_l800_data) == str:
+            runner_meeting_position_l800 = int(
+                runner_meeting_position_l800_data)
 
-        runner_meeting_position_l600_data = data.get('runnerMeetingPositionL600')
+        runner_meeting_position_l600_data = data.get(
+            'runnerMeetingPositionL600')
         if runner_meeting_position_l600_data == None:
             runner_meeting_position_l600 = 0
-        else:
-            runner_meeting_position_l600 = int(runner_meeting_position_l600_data)
+        elif type(runner_meeting_position_l600_data) == str:
+            runner_meeting_position_l600 = int(
+                runner_meeting_position_l600_data)
 
-        runner_meeting_position_l400_data = data.get('runnerMeetingPositionL400')
+        runner_meeting_position_l400_data = data.get(
+            'runnerMeetingPositionL400')
         if runner_meeting_position_l400_data == None:
             runner_meeting_position_l400 = 0
-        else:
-            runner_meeting_position_l400 = int(runner_meeting_position_l400_data)
+        elif type(runner_meeting_position_l400_data) == str:
+            runner_meeting_position_l400 = int(
+                runner_meeting_position_l400_data)
 
-        runner_meeting_position_l200_data = data.get('runnerMeetingPositionL200')
+        runner_meeting_position_l200_data = data.get(
+            'runnerMeetingPositionL200')
         if runner_meeting_position_l200_data == None:
             runner_meeting_position_l200 = 0
-        else:
-            runner_meeting_position_l200 = int(runner_meeting_position_l200_data)
+        elif type(runner_meeting_position_l200_data) == str:
+            runner_meeting_position_l200 = int(
+                runner_meeting_position_l200_data)
 
-        
         return cls(
             runner_tempo_quantile_rank=runner_tempo_quantile_rank,
             runner_tempo_label=data.get('runnerTempoLabel', ""),
@@ -430,7 +441,8 @@ class FormBenchmark:
             runner_meeting_position_l200=runner_meeting_position_l200
         )
 
-@ dataclass
+
+@dataclass
 class Splits:
     runner_split_l800: float
     runner_split_l600: float
@@ -457,7 +469,7 @@ class Splits:
                 runner_split_l200=0.0,
                 runner_split_finish=0.0
             )
-        
+
         l800_data = sectional_times.get('l800', {})
         l600_data = sectional_times.get('l600', {})
         l400_data = sectional_times.get('l400', {})
@@ -483,13 +495,13 @@ class Splits:
         )
 
 
-@ dataclass
+@dataclass
 class PositionSummary:
     distance: int
     position: Optional[int]
     time: str
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'PositionSummary':
         if data is None:
             return cls(
@@ -504,7 +516,7 @@ class PositionSummary:
         )
 
 
-@ dataclass
+@dataclass
 class Run:
     id: str
     finish_position: int
@@ -542,7 +554,7 @@ class Run:
     form_benchmark: FormBenchmark
     splits: Splits
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Run':
         if data is None:
             return cls(
@@ -623,7 +635,7 @@ class Run:
         for summary in position_summaries_data:
             position_summaries.append(PositionSummary.from_dict(summary))
 
-        # if position summary doesnt have pos check sectionalTimes
+        # if position summary doesn't have pos check sectionalTimes
         for summary in position_summaries:
             if summary.position is None:
                 distance = summary.distance
@@ -674,7 +686,7 @@ class Run:
         )
 
 
-@ dataclass
+@dataclass
 class Selection:
     id: str
     name: str
@@ -703,7 +715,7 @@ class Selection:
     roi: float
     odds: list[Odds]
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Selection':
         if data is None:
             return cls(
@@ -756,18 +768,17 @@ class Selection:
             text = comment.get('comments', "")
             external_comments[brand] = text
 
-        weight_data = data.get('weight', 0)
-        if weight_data == None:
-            weight = 0
-        else:
+        weight_data = data.get('weight', 0.0)
+        if type(weight_data) == str:
             weight = float(weight_data)
-
-        claim_data = data.get('jockeyWeightClaim', 0)
-        if claim_data == None:
-            claim = 0
         else:
-            claim = float(claim_data)
+            weight = 0.0
 
+        claim_data = data.get('jockeyWeightClaim', 0.0)
+        if type(claim_data) == str:
+            claim = float(claim_data)
+        else:
+            claim = 0.0
 
         return cls(
             id=data.get('id', ""),
@@ -818,6 +829,9 @@ class Selection:
             if days_since_last > SPELL_THRESHOLD:
                 self.runs_since_spell = index
                 break
+            elif index == len(non_trial_runs) - 1:
+                self.runs_since_spell = len(non_trial_runs)
+                break
 
     def add_stats(self, stats: dict):
         self.trainerJockeyWin = stats.get(
@@ -853,7 +867,7 @@ class Selection:
                     break
 
 
-@ dataclass
+@dataclass
 class Event:
     event_id: int
     name: str
@@ -871,7 +885,7 @@ class Event:
     comments: dict[str, str]
     selections: list[Selection]
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Event':
         event_comments = data.get('comments', [])
         comments = {}
@@ -935,7 +949,7 @@ class Event:
         )
 
 
-@ dataclass
+@dataclass
 class Meeting:
     meeting_id: str
     name: str
@@ -944,7 +958,7 @@ class Meeting:
     rail_position: str
     events: list[Event]
 
-    @ classmethod
+    @classmethod
     def from_dict(cls, data: dict) -> 'Meeting':
         events = []
         for event in data.get('events', []):

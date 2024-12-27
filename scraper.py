@@ -64,7 +64,7 @@ class MeetingsScraper:
             variables=FullFormQueryVariables(
                 selectionIds=selection_ids, limit=10))
         return QueryRequest(query_info=form_query)
-    
+
     def create_sectional_query(self, selection_ids: list) -> QueryRequest:
         sectional_query = QueryInfo(
             query_type=QueryType.SECTIONAL,
@@ -178,7 +178,8 @@ class MeetingsScraper:
             for sectional in sectionals_data:
                 for selection in meeting.events[index].selections:
                     if selection.id == sectional.get('selectionId'):
-                        selection.add_sectional_splits(sectional.get('forms', []))
+                        selection.add_sectional_splits(
+                            sectional.get('forms', []))
 
         for index in reversed(delete_events):
             del meeting.events[index]

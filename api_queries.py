@@ -99,7 +99,7 @@ class FullFormQueryVariables(Variables):
             "selectionIds": self.selectionIds,
             "limit": self.limit
         }
-    
+
 
 @dataclass
 class SectionalQueryVariables(Variables):
@@ -177,7 +177,8 @@ class QueryInfo:
             raise ValueError("Variables type does not match operation type")
         if self.query_type == QueryType.ODDS:
             if type(self.variables) != OddsQueryVariables:
-                raise ValueError("Variables type does not match operation type")
+                raise ValueError(
+                    "Variables type does not match operation type")
             params = {
                 "bookmaker": ",".join(self.variables.bookmakers),
                 "betTypes": ",".join(self.variables.betTypes),
@@ -232,7 +233,8 @@ class QueryRequest:
     def send_request(self) -> dict:
         if self.query_info.query_type == QueryType.ODDS:
             if type(self.query_info.variables) != OddsQueryVariables:
-                raise ValueError("Variables type does not match operation type")
+                raise ValueError(
+                    "Variables type does not match operation type")
 
             request_url = f"https://puntapi.com/odds/au/event/{self.query_info.variables.eventId}"
         else:
