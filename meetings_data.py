@@ -834,8 +834,8 @@ class Selection:
                 break
 
     def add_stats(self, stats: dict):
-        self.trainerJockeyWin = stats.get(
-            'trainerJockeyWinPercentage', 0.0)
+        self.trainer_jockey_win_percentage = stats.get(
+            'trainerJockeyWin', 0.0)
         self.total_runs = stats.get('totalRuns', 0)
         total_places = stats.get('totalPlaces', [])
         if len(total_places) == 3:

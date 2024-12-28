@@ -582,19 +582,38 @@ class SelectionWidget(QtWidgets.QWidget):
             if match_ratio > 0.8:
                 trainer_label_text += " [H]"
         trainer_label = SmallInfoLabel(trainer_label_text)
+        score = 0
         if selection.trainer.last_year_win_percentage is not None and \
-                selection.trainer.last_year_win_percentage >= 0.17:
+                selection.trainer.last_year_win_percentage >= 0.18:
+            score += 1
+        if selection.trainer_jockey_win_percentage is not None and \
+                selection.trainer_jockey_win_percentage >= 0.18:
+            score += 1
+        if score == 1:
             trainer_label.setStyleSheet(
                 trainer_label.styleSheet() + "color: orange;")
+        elif score == 2:
+            trainer_label.setStyleSheet(
+                trainer_label.styleSheet() + "color: red;")
+
         trainer_label.setFixedWidth(screen_width_percentage(0.1))
         layout.addWidget(
             trainer_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
         jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
+        score = 0
         if selection.jockey.last_year_win_percentage is not None and \
                 selection.jockey.last_year_win_percentage >= 0.12:
+            score += 1
+        if selection.trainer_jockey_win_percentage is not None and \
+                selection.trainer_jockey_win_percentage >= 0.18:
+            score += 1
+        if score == 1:
             jockey_label.setStyleSheet(
                 jockey_label.styleSheet() + "color: orange;")
+        elif score == 2:
+            jockey_label.setStyleSheet(
+                jockey_label.styleSheet() + "color: red;")
         jockey_label.setFixedWidth(screen_width_percentage(0.09))
         layout.addWidget(
             jockey_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -947,7 +966,7 @@ class EventStatsWidget(QtWidgets.QWidget):
         for selection in selections:
             value = selection.trainer_jockey_win_percentage
             layout.addWidget(
-                SelectionGraphWidget(value, 100, selection.number),
+                SelectionGraphWidget(value, 70, selection.number),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop)
 
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
