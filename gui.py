@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets, QtGui
 from meetings_data import Meeting, group_by_state, Event, Selection, Run, PositionSummary, \
-    FormBenchmark, Trainer, Jockey, Prediction, Odds, OddsFluctuation, Splits, SPELL_THRESHOLD
+    FormBenchmark, Trainer, Jockey, Prediction, Odds, OddsFluctuation, Splits, SPELL_THRESHOLD, \
+    PreparationStats
 from scraper import MeetingsScraper
 from datetime import datetime
 import qdarkstyle
@@ -243,7 +244,7 @@ class RunsTitleWidget(QtWidgets.QWidget):
         layout.addWidget(finish_pos_label)
 
         margin_label = HeadingLabel("Mar.")
-        margin_label.setFixedWidth(screen_width_percentage(0.02))
+        margin_label.setFixedWidth(screen_width_percentage(0.021))
         layout.addWidget(margin_label)
 
         venue_label = HeadingLabel("Venue")
@@ -340,7 +341,7 @@ class RunsWidget(QtWidgets.QWidget):
         layout.addWidget(finish_pos_label)
 
         margin_label = SmallInfoLabel(run.margin)
-        margin_label.setFixedWidth(screen_width_percentage(0.02))
+        margin_label.setFixedWidth(screen_width_percentage(0.021))
         layout.addWidget(margin_label)
 
         venue_label = SmallInfoLabel(run.venue)
@@ -658,13 +659,35 @@ class SelectionWidget(QtWidgets.QWidget):
         roi_label.setFixedWidth(screen_width_percentage(0.052))
         layout.addWidget(
             roi_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
         def ordinal(n): return "%d%s" % (
             n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4])
         prep_label = SmallInfoLabel(
             f"{ordinal(selection.runs_since_spell + 1)} up")
         prep_label.setFixedWidth(screen_width_percentage(0.035))
+        score = 0
+        win_percentage, average_difference, max_difference = \
+            selection.preparation_stats.get_preparation_stats(
+                selection.runs_since_spell)
+        if win_percentage is not None and win_percentage >= 0.30:
+            score += 1
+        if average_difference is not None and average_difference <= -0.75:
+            score += 1
+        if max_difference is not None and max_difference <= -1.5 and \
+                selection.runs_since_spell < 3:
+            score += 1
+        if score == 1:
+            prep_label.setStyleSheet(
+                prep_label.styleSheet() + "color: orange;")
+        elif score == 2:
+            prep_label.setStyleSheet(
+                prep_label.styleSheet() + "color: red;")
+        elif score == 3:
+            prep_label.setStyleSheet(
+                prep_label.styleSheet() + "color: #d503ff;")
         layout.addWidget(
             prep_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
         if selection.days_since_last is None or selection.days_since_last == 0:
             days_since_label = SmallInfoLabel("Unraced")
         else:

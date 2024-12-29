@@ -553,6 +553,7 @@ class Run:
     position_summaries: list[PositionSummary]
     form_benchmark: FormBenchmark
     splits: Splits
+    runs_since_spell: Optional[int]
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Run':
@@ -592,7 +593,8 @@ class Run:
                 finish_time=0.0,
                 position_summaries=[],
                 form_benchmark=FormBenchmark.from_dict({}),
-                splits=Splits.from_dict({})
+                splits=Splits.from_dict({}),
+                runs_since_spell=None
             )
 
         track_condition_data = data.get('trackCondition', "")
@@ -649,6 +651,15 @@ class Run:
                     continue
                 summary.position = sectional_time_data.get('position')
 
+        if data.get('isFirstUp', False):
+            runs_since_spell = 0
+        elif data.get('isSecondUp', False):
+            runs_since_spell = 1
+        elif data.get('isThirdUp', False):
+            runs_since_spell = 2
+        else:
+            runs_since_spell = 3  # 4th up or more
+
         return cls(
             id=data.get('id', ""),
             finish_position=data.get('finishPosition', 0),
@@ -682,8 +693,134 @@ class Run:
             position_summaries=position_summaries,
             form_benchmark=FormBenchmark.from_dict(
                 data.get('competitorFormBenchmark', {})),
-            splits=Splits.from_dict({})
+            splits=Splits.from_dict({}),
+            runs_since_spell=runs_since_spell
         )
+
+
+@dataclass
+class PreparationStats:
+    first_up_win_percentage: float
+    first_up_average_difference: float
+    first_up_maximum_difference: float
+    second_up_win_percentage: float
+    second_up_average_difference: float
+    second_up_maximum_difference: float
+    third_up_win_percentage: float
+    third_up_average_difference: float
+    third_up_maximum_difference: float
+    nth_up_win_percentage: float
+    nth_up_average_difference: float
+    nth_up_maximum_difference: float
+
+    @classmethod
+    def from_runs(cls, runs: list[Run]) -> 'PreparationStats':
+        non_trial_runs: list[Run] = [
+            run for run in runs if run.is_trial == False]
+
+        first_up_runs = [
+            run for run in non_trial_runs if run.runs_since_spell == 0]
+        second_up_runs = [
+            run for run in non_trial_runs if run.runs_since_spell == 1]
+        third_up_runs = [
+            run for run in non_trial_runs if run.runs_since_spell == 2]
+        nth_up_runs = [
+            run for run in non_trial_runs if run.runs_since_spell == 3]
+
+        first_up_win_percentage = 0.0
+        first_up_average_difference = 0.0
+        first_up_maximum_difference = 0.0
+        if len(first_up_runs) != 0:
+            first_up_win_percentage = float(
+                len([run for run in first_up_runs if run.finish_position == 1]) / len(first_up_runs))
+            first_up_average_differences = []
+            for run in first_up_runs:
+                if run.form_benchmark.runner_time_difference is not None:
+                    first_up_average_differences.append(
+                        run.form_benchmark.runner_time_difference)
+            if len(first_up_average_differences) > 0:
+                first_up_average_difference = sum(first_up_average_differences) \
+                    / len(first_up_average_differences)
+                first_up_maximum_difference = max(first_up_average_differences)
+
+        second_up_win_percentage = 0.0
+        second_up_average_difference = 0.0
+        second_up_maximum_difference = 0.0
+        if len(second_up_runs) != 0:
+            second_up_win_percentage = float(
+                len([run for run in second_up_runs if run.finish_position == 1]) / len(second_up_runs))
+            second_up_average_differences = []
+            for run in second_up_runs:
+                if run.form_benchmark.runner_time_difference is not None:
+                    second_up_average_differences.append(
+                        run.form_benchmark.runner_time_difference)
+            if len(second_up_average_differences) > 0:
+                second_up_average_difference = sum(second_up_average_differences) \
+                    / len(second_up_average_differences)
+                second_up_maximum_difference = max(
+                    second_up_average_differences)
+
+        third_up_win_percentage = 0.0
+        third_up_average_difference = 0.0
+        third_up_maximum_difference = 0.0
+        if len(third_up_runs) != 0:
+            third_up_win_percentage = float(
+                len([run for run in third_up_runs if run.finish_position == 1]) / len(third_up_runs))
+            third_up_average_differences = []
+            for run in third_up_runs:
+                if run.form_benchmark.runner_time_difference is not None:
+                    third_up_average_differences.append(
+                        run.form_benchmark.runner_time_difference)
+            if len(third_up_average_differences) > 0:
+                third_up_average_difference = sum(third_up_average_differences) \
+                    / len(third_up_average_differences)
+                third_up_maximum_difference = max(
+                    third_up_average_differences)
+
+        nth_up_win_percentage = 0.0
+        nth_up_average_difference = 0.0
+        nth_up_maximum_difference = 0.0
+        if len(nth_up_runs) != 0:
+            nth_up_win_percentage = float(
+                len([run for run in nth_up_runs if run.finish_position == 1]) / len(nth_up_runs))
+            nth_up_average_differences = []
+            for run in nth_up_runs:
+                if run.form_benchmark.runner_time_difference is not None:
+                    nth_up_average_differences.append(
+                        run.form_benchmark.runner_time_difference)
+            if len(nth_up_average_differences) > 0:
+                nth_up_average_difference = sum(nth_up_average_differences) \
+                    / len(nth_up_average_differences)
+                nth_up_maximum_difference = max(nth_up_average_differences)
+
+        return cls(
+            first_up_win_percentage=first_up_win_percentage,
+            first_up_average_difference=first_up_average_difference,
+            first_up_maximum_difference=first_up_maximum_difference,
+            second_up_win_percentage=second_up_win_percentage,
+            second_up_average_difference=second_up_average_difference,
+            second_up_maximum_difference=second_up_maximum_difference,
+            third_up_win_percentage=third_up_win_percentage,
+            third_up_average_difference=third_up_average_difference,
+            third_up_maximum_difference=third_up_maximum_difference,
+            nth_up_win_percentage=nth_up_win_percentage,
+            nth_up_average_difference=nth_up_average_difference,
+            nth_up_maximum_difference=nth_up_maximum_difference
+        )
+
+    def get_preparation_stats(self, run_since_spell: int) -> tuple[float, float, float]:
+        if run_since_spell == 0:
+            return self.first_up_win_percentage, self.first_up_average_difference, \
+                self.first_up_maximum_difference
+        elif run_since_spell == 1:
+            return self.second_up_win_percentage, self.second_up_average_difference, \
+                self.second_up_maximum_difference
+        elif run_since_spell == 2:
+            return self.third_up_win_percentage, self.third_up_average_difference, \
+                self.third_up_maximum_difference
+        else:
+            return self.nth_up_win_percentage, self.nth_up_average_difference, \
+                self.nth_up_maximum_difference
 
 
 @dataclass
@@ -714,6 +851,7 @@ class Selection:
     wet_runs_place_percentage: float
     roi: float
     odds: list[Odds]
+    preparation_stats: PreparationStats
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Selection':
@@ -744,7 +882,8 @@ class Selection:
                 wet_runs_win_percentage=0.0,
                 wet_runs_place_percentage=0.0,
                 roi=0.0,
-                odds=[]
+                odds=[],
+                preparation_stats=PreparationStats.from_runs([])
             )
 
         competitor = data.get('competitor')
@@ -806,12 +945,15 @@ class Selection:
             wet_runs_win_percentage=0.0,
             wet_runs_place_percentage=0.0,
             roi=0.0,
-            odds=[]
+            odds=[],
+            preparation_stats=PreparationStats.from_runs([])
         )
 
     def add_runs(self, runs: list[dict]):
         for run in runs:
             self.runs.append(Run.from_dict(run))
+
+        self.add_preparation_stats()
 
         non_trial_runs: list[Run] = [
             run for run in self.runs if run.is_trial == False]
@@ -865,6 +1007,9 @@ class Selection:
                 if run.id == split.get('id', ""):
                     run.splits = Splits.from_dict(split)
                     break
+
+    def add_preparation_stats(self):
+        self.preparation_stats = PreparationStats.from_runs(self.runs)
 
 
 @dataclass
