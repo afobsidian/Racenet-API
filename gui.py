@@ -585,10 +585,10 @@ class SelectionWidget(QtWidgets.QWidget):
         trainer_label = SmallInfoLabel(trainer_label_text)
         score = 0
         if selection.trainer.last_year_win_percentage is not None and \
-                selection.trainer.last_year_win_percentage >= 0.20:
+                selection.trainer.last_year_win_percentage >= 0.18:
             score += 1
         if selection.trainer_jockey_win_percentage is not None and \
-                selection.trainer_jockey_win_percentage >= 0.25:
+                selection.trainer_jockey_win_percentage >= 20:
             score += 1
         if score == 1:
             trainer_label.setStyleSheet(
@@ -604,10 +604,10 @@ class SelectionWidget(QtWidgets.QWidget):
         jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
         score = 0
         if selection.jockey.last_year_win_percentage is not None and \
-                selection.jockey.last_year_win_percentage >= 0.15:
+                selection.jockey.last_year_win_percentage >= 0.12:
             score += 1
         if selection.trainer_jockey_win_percentage is not None and \
-                selection.trainer_jockey_win_percentage >= 0.25:
+                selection.trainer_jockey_win_percentage >= 20:
             score += 1
         if score == 1:
             jockey_label.setStyleSheet(
@@ -669,9 +669,9 @@ class SelectionWidget(QtWidgets.QWidget):
         win_percentage, average_difference, max_difference = \
             selection.preparation_stats.get_preparation_stats(
                 selection.runs_since_spell)
-        if win_percentage is not None and win_percentage >= 0.30:
+        if win_percentage is not None and win_percentage >= 0.33:
             score += 1
-        if average_difference is not None and average_difference <= -0.75:
+        if average_difference is not None and average_difference <= -1:
             score += 1
         if max_difference is not None and max_difference <= -1.5 and \
                 selection.runs_since_spell < 3:
@@ -1132,14 +1132,14 @@ class EventAnalysisWidget(QtWidgets.QWidget):
         layout.setSpacing(0)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
         combo_box = QtWidgets.QComboBox()
-        combo_box.addItem("Speed Analysis")
         combo_box.addItem("Model Analysis")
+        combo_box.addItem("Speed Analysis")
         combo_box.addItem("Stats Analysis")
         layout.addWidget(combo_box)
         combo_box.currentIndexChanged.connect(
             lambda index: self.change_analysis(index, event))
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        layout.addWidget(EventSpeedWidget(event))
+        layout.addWidget(EventModelWidget(event))
 
     def change_analysis(self, index: int, event: Event):
         layout = self.layout()
@@ -1155,9 +1155,9 @@ class EventAnalysisWidget(QtWidgets.QWidget):
                 continue
             item.widget().setParent(None)
         if index == 0:
-            layout.addWidget(EventSpeedWidget(event))
-        elif index == 1:
             layout.addWidget(EventModelWidget(event))
+        elif index == 1:
+            layout.addWidget(EventSpeedWidget(event))
         elif index == 2:
             layout.addWidget(EventStatsWidget(event))
 
