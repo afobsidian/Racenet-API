@@ -584,10 +584,10 @@ class SelectionWidget(QtWidgets.QWidget):
         trainer_label = SmallInfoLabel(trainer_label_text)
         score = 0
         if selection.trainer.last_year_win_percentage is not None and \
-                selection.trainer.last_year_win_percentage >= 0.18:
+                selection.trainer.last_year_win_percentage >= 0.20:
             score += 1
         if selection.trainer_jockey_win_percentage is not None and \
-                selection.trainer_jockey_win_percentage >= 0.18:
+                selection.trainer_jockey_win_percentage >= 0.25:
             score += 1
         if score == 1:
             trainer_label.setStyleSheet(
@@ -603,10 +603,10 @@ class SelectionWidget(QtWidgets.QWidget):
         jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
         score = 0
         if selection.jockey.last_year_win_percentage is not None and \
-                selection.jockey.last_year_win_percentage >= 0.12:
+                selection.jockey.last_year_win_percentage >= 0.15:
             score += 1
         if selection.trainer_jockey_win_percentage is not None and \
-                selection.trainer_jockey_win_percentage >= 0.18:
+                selection.trainer_jockey_win_percentage >= 0.25:
             score += 1
         if score == 1:
             jockey_label.setStyleSheet(
