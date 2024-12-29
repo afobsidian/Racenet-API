@@ -198,6 +198,14 @@ class SectionalWidget(QtWidgets.QWidget):
         if position != 0:
             label_text += f" [{position}]"
         self.label = SmallInfoLabel(label_text)
+        tooltip = ""
+        if benchmark is not None:
+            tooltip += f"Sectional Benchmark\n{benchmark:.1f}"
+        if race_rank is not None:
+            tooltip += f"\nRace Rank\n{race_rank}"
+        if meeting_rank is not None:
+            tooltip += f"\nMeeting Rank\n{meeting_rank}"
+        self.label.setToolTip(tooltip)
         layout.addWidget(self.label)
         self.installEventFilter(self)
 
@@ -596,7 +604,14 @@ class SelectionWidget(QtWidgets.QWidget):
         elif score == 2:
             trainer_label.setStyleSheet(
                 trainer_label.styleSheet() + "color: red;")
-
+        tooltip = ""
+        if selection.trainer.last_year_win_percentage is not None:
+            tooltip += f"Last Year Win Percentage\n{selection.trainer.last_year_win_percentage*100:.0f}%"
+        if selection.trainer.last_year_place_percentage is not None:
+            tooltip += f"\nLast Year Place Percentage\n{selection.trainer.last_year_place_percentage*100:.0f}%"
+        if selection.trainer_jockey_win_percentage is not None:
+            tooltip += f"\nTrainer Jockey Win Percentage\n{selection.trainer_jockey_win_percentage:.0f}%"
+        trainer_label.setToolTip(tooltip)
         trainer_label.setFixedWidth(screen_width_percentage(0.1))
         layout.addWidget(
             trainer_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -604,7 +619,7 @@ class SelectionWidget(QtWidgets.QWidget):
         jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
         score = 0
         if selection.jockey.last_year_win_percentage is not None and \
-                selection.jockey.last_year_win_percentage >= 0.12:
+                selection.jockey.last_year_win_percentage >= 0.14:
             score += 1
         if selection.trainer_jockey_win_percentage is not None and \
                 selection.trainer_jockey_win_percentage >= 20:
@@ -616,6 +631,14 @@ class SelectionWidget(QtWidgets.QWidget):
             jockey_label.setStyleSheet(
                 jockey_label.styleSheet() + "color: red;")
         jockey_label.setFixedWidth(screen_width_percentage(0.09))
+        tooltip = ""
+        if selection.jockey.last_year_win_percentage is not None:
+            tooltip += f"Last Year Win Percentage\n{selection.jockey.last_year_win_percentage*100:.0f}%"
+        if selection.jockey.last_year_place_percentage is not None:
+            tooltip += f"\nLast Year Place Percentage\n{selection.jockey.last_year_place_percentage*100:.0f}%"
+        if selection.trainer_jockey_win_percentage is not None:
+            tooltip += f"\nTrainer Jockey Win Percentage\n{selection.trainer_jockey_win_percentage:.0f}%"
+        jockey_label.setToolTip(tooltip)
         layout.addWidget(
             jockey_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
@@ -685,6 +708,14 @@ class SelectionWidget(QtWidgets.QWidget):
         elif score == 3:
             prep_label.setStyleSheet(
                 prep_label.styleSheet() + "color: #d503ff;")
+        tooltip = ""
+        if win_percentage is not None:
+            tooltip += f"Win Percentage\n{win_percentage*100:.0f}%"
+        if average_difference is not None:
+            tooltip += f"\nAverage Difference\n{average_difference:.2f}"
+        if max_difference is not None:
+            tooltip += f"\nMax Difference\n{max_difference:.2f}"
+        prep_label.setToolTip(tooltip)
         layout.addWidget(
             prep_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
