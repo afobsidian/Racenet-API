@@ -689,15 +689,15 @@ class SelectionWidget(QtWidgets.QWidget):
             f"{ordinal(selection.runs_since_spell + 1)} up")
         prep_label.setFixedWidth(screen_width_percentage(0.035))
         score = 0
-        win_percentage, average_difference, max_difference = \
+        win_percentage, average_difference, std_dev = \
             selection.preparation_stats.get_preparation_stats(
                 selection.runs_since_spell)
         if win_percentage is not None and win_percentage >= 0.33:
             score += 1
         if average_difference is not None and average_difference <= -1:
             score += 1
-        if max_difference is not None and max_difference <= -1.5 and \
-                selection.runs_since_spell < 3:
+        if std_dev is not None and std_dev != 0.00 and \
+                std_dev <= 0.5:
             score += 1
         if score == 1:
             prep_label.setStyleSheet(
@@ -713,8 +713,8 @@ class SelectionWidget(QtWidgets.QWidget):
             tooltip += f"Win Percentage\n{win_percentage*100:.0f}%"
         if average_difference is not None:
             tooltip += f"\nAverage Difference\n{average_difference:.2f}"
-        if max_difference is not None:
-            tooltip += f"\nMax Difference\n{max_difference:.2f}"
+        if std_dev is not None:
+            tooltip += f"\nStandard Deviation\n{std_dev:.2f}"
         prep_label.setToolTip(tooltip)
         layout.addWidget(
             prep_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -771,7 +771,7 @@ class SelectionsWidget(QtWidgets.QWidget):
     def __init__(self, selections: list[Selection], venue: str):
         super(SelectionsWidget, self).__init__()
         self.setContentsMargins(0, 0, 0, 0)
-        self.setFixedHeight(screen_height_percentage(0.69))
+        self.setFixedHeight(screen_height_percentage(0.67))
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setContentsMargins(0, 0, 0, 0)

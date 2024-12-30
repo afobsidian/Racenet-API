@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Optional, Literal
 from datetime import datetime, timezone
+from statistics import stdev
 
-SPELL_THRESHOLD = 45
-FRESHEST_THRESHOLD = 25
+SPELL_THRESHOLD = 60
+FRESHEST_THRESHOLD = 45
 
 
 @dataclass
@@ -702,16 +703,16 @@ class Run:
 class PreparationStats:
     first_up_win_percentage: float
     first_up_average_difference: float
-    first_up_maximum_difference: float
+    first_up_stdev_difference: float
     second_up_win_percentage: float
     second_up_average_difference: float
-    second_up_maximum_difference: float
+    second_up_stdev_difference: float
     third_up_win_percentage: float
     third_up_average_difference: float
-    third_up_maximum_difference: float
+    third_up_stdev_difference: float
     nth_up_win_percentage: float
     nth_up_average_difference: float
-    nth_up_maximum_difference: float
+    nth_up_stdev_difference: float
 
     @classmethod
     def from_runs(cls, runs: list[Run]) -> 'PreparationStats':
@@ -729,98 +730,102 @@ class PreparationStats:
 
         first_up_win_percentage = 0.0
         first_up_average_difference = 0.0
-        first_up_maximum_difference = 0.0
+        first_up_stdev_difference = 0.0
         if len(first_up_runs) != 0:
             first_up_win_percentage = float(
                 len([run for run in first_up_runs if run.finish_position == 1]) / len(first_up_runs))
-            first_up_average_differences = []
+            first_up_differences = []
             for run in first_up_runs:
                 if run.form_benchmark.runner_time_difference is not None:
-                    first_up_average_differences.append(
+                    first_up_differences.append(
                         run.form_benchmark.runner_time_difference)
-            if len(first_up_average_differences) > 0:
-                first_up_average_difference = sum(first_up_average_differences) \
-                    / len(first_up_average_differences)
-                first_up_maximum_difference = max(first_up_average_differences)
+            if len(first_up_differences) > 0:
+                first_up_average_difference = sum(first_up_differences) \
+                    / len(first_up_differences)
+                if len(first_up_differences) >= 2:
+                    first_up_stdev_difference = stdev(first_up_differences)
 
         second_up_win_percentage = 0.0
         second_up_average_difference = 0.0
-        second_up_maximum_difference = 0.0
+        second_up_stdev_difference = 0.0
         if len(second_up_runs) != 0:
             second_up_win_percentage = float(
                 len([run for run in second_up_runs if run.finish_position == 1]) / len(second_up_runs))
-            second_up_average_differences = []
+            second_up_differences = []
             for run in second_up_runs:
                 if run.form_benchmark.runner_time_difference is not None:
-                    second_up_average_differences.append(
+                    second_up_differences.append(
                         run.form_benchmark.runner_time_difference)
-            if len(second_up_average_differences) > 0:
-                second_up_average_difference = sum(second_up_average_differences) \
-                    / len(second_up_average_differences)
-                second_up_maximum_difference = max(
-                    second_up_average_differences)
+            if len(second_up_differences) > 0:
+                second_up_average_difference = sum(second_up_differences) \
+                    / len(second_up_differences)
+                if len(second_up_differences) >= 2:
+                    second_up_stdev_difference = stdev(
+                        second_up_differences)
 
         third_up_win_percentage = 0.0
         third_up_average_difference = 0.0
-        third_up_maximum_difference = 0.0
+        third_up_stdev_difference = 0.0
         if len(third_up_runs) != 0:
             third_up_win_percentage = float(
                 len([run for run in third_up_runs if run.finish_position == 1]) / len(third_up_runs))
-            third_up_average_differences = []
+            third_up_differences = []
             for run in third_up_runs:
                 if run.form_benchmark.runner_time_difference is not None:
-                    third_up_average_differences.append(
+                    third_up_differences.append(
                         run.form_benchmark.runner_time_difference)
-            if len(third_up_average_differences) > 0:
-                third_up_average_difference = sum(third_up_average_differences) \
-                    / len(third_up_average_differences)
-                third_up_maximum_difference = max(
-                    third_up_average_differences)
+            if len(third_up_differences) > 0:
+                third_up_average_difference = sum(third_up_differences) \
+                    / len(third_up_differences)
+                if len(third_up_differences) >= 2:
+                    third_up_stdev_difference = stdev(
+                        third_up_differences)
 
         nth_up_win_percentage = 0.0
         nth_up_average_difference = 0.0
-        nth_up_maximum_difference = 0.0
+        nth_up_stdev_difference = 0.0
         if len(nth_up_runs) != 0:
             nth_up_win_percentage = float(
                 len([run for run in nth_up_runs if run.finish_position == 1]) / len(nth_up_runs))
-            nth_up_average_differences = []
+            nth_up_differences = []
             for run in nth_up_runs:
                 if run.form_benchmark.runner_time_difference is not None:
-                    nth_up_average_differences.append(
+                    nth_up_differences.append(
                         run.form_benchmark.runner_time_difference)
-            if len(nth_up_average_differences) > 0:
-                nth_up_average_difference = sum(nth_up_average_differences) \
-                    / len(nth_up_average_differences)
-                nth_up_maximum_difference = max(nth_up_average_differences)
+            if len(nth_up_differences) > 0:
+                nth_up_average_difference = sum(nth_up_differences) \
+                    / len(nth_up_differences)
+                if len(nth_up_differences) >= 2:
+                    nth_up_stdev_difference = stdev(nth_up_differences)
 
         return cls(
             first_up_win_percentage=first_up_win_percentage,
             first_up_average_difference=first_up_average_difference,
-            first_up_maximum_difference=first_up_maximum_difference,
+            first_up_stdev_difference=first_up_stdev_difference,
             second_up_win_percentage=second_up_win_percentage,
             second_up_average_difference=second_up_average_difference,
-            second_up_maximum_difference=second_up_maximum_difference,
+            second_up_stdev_difference=second_up_stdev_difference,
             third_up_win_percentage=third_up_win_percentage,
             third_up_average_difference=third_up_average_difference,
-            third_up_maximum_difference=third_up_maximum_difference,
+            third_up_stdev_difference=third_up_stdev_difference,
             nth_up_win_percentage=nth_up_win_percentage,
             nth_up_average_difference=nth_up_average_difference,
-            nth_up_maximum_difference=nth_up_maximum_difference
+            nth_up_stdev_difference=nth_up_stdev_difference
         )
 
     def get_preparation_stats(self, run_since_spell: int) -> tuple[float, float, float]:
         if run_since_spell == 0:
             return self.first_up_win_percentage, self.first_up_average_difference, \
-                self.first_up_maximum_difference
+                self.first_up_stdev_difference
         elif run_since_spell == 1:
             return self.second_up_win_percentage, self.second_up_average_difference, \
-                self.second_up_maximum_difference
+                self.second_up_stdev_difference
         elif run_since_spell == 2:
             return self.third_up_win_percentage, self.third_up_average_difference, \
-                self.third_up_maximum_difference
+                self.third_up_stdev_difference
         else:
             return self.nth_up_win_percentage, self.nth_up_average_difference, \
-                self.nth_up_maximum_difference
+                self.nth_up_stdev_difference
 
 
 @dataclass
