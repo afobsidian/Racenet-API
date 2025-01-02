@@ -803,7 +803,7 @@ class SelectionsWidget(QtWidgets.QWidget):
             to_date = datetime.now()
             for run in selection.runs[:10]:
                 from_date = datetime.strptime(run.meeting_date, "%Y-%m-%d")
-                if (to_date - from_date).days > SPELL_THRESHOLD:
+                if (to_date - from_date).days > (SPELL_THRESHOLD - 20):
                     layout.addWidget(SpellWidget((to_date - from_date).days))
                 to_date = from_date
                 run_widget = RunsWidget(
@@ -1275,6 +1275,8 @@ class MeetingInfoWidget(QtWidgets.QWidget):
 
         layout.addWidget(SubtitleLabel(f"Weather"))
         layout.addWidget(QHLine())
+        if weather is None:
+            weather = "Unknown"
         layout.addWidget(LargeInfoLabel(weather.capitalize()))
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 15))
         layout.addStretch()

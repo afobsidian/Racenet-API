@@ -3,8 +3,8 @@ from typing import Optional, Literal
 from datetime import datetime, timezone
 from statistics import stdev
 
-SPELL_THRESHOLD = 60
-FRESHEST_THRESHOLD = 45
+SPELL_THRESHOLD = 70
+FRESHEST_THRESHOLD = 30
 
 
 @dataclass
