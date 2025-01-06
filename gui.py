@@ -346,10 +346,32 @@ class RunsWidget(QtWidgets.QWidget):
         finish_pos_label = SmallInfoLabel(
             f"{run.finish_position} of {run.starters}")
         finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
+        tooltip = ""
+        if run.winner_name is not None:
+            tooltip += f"1st: {run.winner_name}"
+        if run.second_name is not None:
+            tooltip += f"\n2nd: {run.second_name}"
+        if run.third_name is not None:
+            tooltip += f"\n3rd: {run.third_name}"
+        finish_pos_label.setToolTip(tooltip)
         layout.addWidget(finish_pos_label)
 
-        margin_label = SmallInfoLabel(run.margin)
+        if run.margin is None:
+            margin_label = SmallInfoLabel(" - ")
+        elif run.margin == 0.00:
+            if run.second_margin is not None:
+                margin_label = SmallInfoLabel(f"+{run.second_margin}")
+            else:
+                margin_label = SmallInfoLabel(run.margin)
+        else:
+            margin_label = SmallInfoLabel(run.margin)
         margin_label.setFixedWidth(screen_width_percentage(0.021))
+        tooltip = ""
+        if run.second_margin is not None:
+            tooltip += f"2nd Margin: {run.second_margin}"
+        if run.third_margin is not None:
+            tooltip += f"\n3rd Margin: {run.third_margin}"
+        margin_label.setToolTip(tooltip)
         layout.addWidget(margin_label)
 
         venue_label = SmallInfoLabel(run.venue)
@@ -387,7 +409,7 @@ class RunsWidget(QtWidgets.QWidget):
         layout.addWidget(jockey_label)
 
         if not run.is_trial:
-            if run.fluctuation is None:
+            if run.fluctuation is None or run.fluctuation == 0.00:
                 price_label = SmallInfoLabel(
                     f"${run.open_price}/${run.starting_price}")
             else:
@@ -1074,7 +1096,7 @@ class EventSpeedWidget(QtWidgets.QWidget):
         layout.addWidget(SubtitleLabel("Early Speed"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        selections = sorted(event.selections, key=lambda x: x.barrier)
+        selections = sorted(event.selections, key=lambda x: int(x.barrier))
         # graph based on barrier and predicted speed values
         for selection in selections:
             value = selection.prediction.normalized_speed
