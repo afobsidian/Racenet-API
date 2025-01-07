@@ -3,7 +3,7 @@ from typing import Optional, Literal
 from datetime import datetime, timezone
 from statistics import stdev
 
-SPELL_THRESHOLD = 70
+SPELL_THRESHOLD = 90
 FRESHEST_THRESHOLD = 30
 
 

@@ -877,8 +877,11 @@ class EventInfoWidget(QtWidgets.QWidget):
         layout.addWidget(QVLine())
         layout.addWidget(SmallInfoLabel(f"${event.prize_money:,}"))
         layout.addWidget(QVLine())
-        layout.addWidget(SmallInfoLabel(
-            f"{round(event.pace, 2)} Pace Rating"))
+        if event.pace is not None:
+            layout.addWidget(SmallInfoLabel(
+                f"{round(event.pace, 2)} Pace Rating"))
+        else:
+            layout.addWidget(SmallInfoLabel("Uknown Pace Rating"))
         layout.addWidget(QVLine())
         layout.addWidget(SmallInfoLabel(f"{event.starters} Runners"))
         layout.addWidget(QVLine())
