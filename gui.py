@@ -786,6 +786,12 @@ class SelectionWidget(QtWidgets.QWidget):
                 event.button() == QtCore.Qt.MouseButton.LeftButton:
             self.clicked.emit()
             return True
+        elif event.type() == QtCore.QEvent.Type.MouseButtonPress and \
+                event.button() == QtCore.Qt.MouseButton.RightButton:
+            # copy selection name and number to clipboard
+            clipboard = QtWidgets.QApplication.clipboard()
+            clipboard.setText(
+                f"Rx {self.selection.number}. {self.selection.name}: Medium")
         return False
 
 
