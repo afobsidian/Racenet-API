@@ -353,6 +353,8 @@ class RunsWidget(QtWidgets.QWidget):
             tooltip += f"\n2nd: {run.second_name}"
         if run.third_name is not None:
             tooltip += f"\n3rd: {run.third_name}"
+        if run.competitors_won_since is not None:
+            tooltip += f"\n\n{run.competitors_won_since} Won Since"
         finish_pos_label.setToolTip(tooltip)
         layout.addWidget(finish_pos_label)
 

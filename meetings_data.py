@@ -542,6 +542,7 @@ class Run:
     video_comment: str
     video_note: str
     days_since_last: int
+    competitors_won_since: int
     is_trial: bool
     is_class: bool
     jockey: Jockey
@@ -583,6 +584,7 @@ class Run:
                 video_comment="",
                 video_note="",
                 days_since_last=0,
+                competitors_won_since=0,
                 is_trial=False,
                 is_class=False,
                 jockey=Jockey.from_dict({}),
@@ -608,6 +610,7 @@ class Run:
         venue = ""
         _class = ""
         benchmark_threshold = 0.0
+        competitors_won_since = 0
         selection = data.get('selection', {})
         if selection is not None:
             event = selection.get('event', {})
@@ -615,6 +618,7 @@ class Run:
                 _class = event.get('eventClass', "")
                 benchmark_threshold = event.get('benchmarkThreshold', 0.0)
                 meeting = event.get('meeting', {})
+                competitors_won_since = event.get('competitorsWonSince', 0)
                 if meeting is not None:
                     venue = meeting.get('name', "")
         else:
@@ -685,6 +689,7 @@ class Run:
             video_comment=data.get('videoComment', ""),
             video_note=data.get('videoNote', ""),
             days_since_last=data.get('daysSinceLastRun', 0),
+            competitors_won_since=competitors_won_since,
             is_trial=data.get('isTrial', False),
             is_class=data.get('isClass', False),
             jockey=Jockey.from_dict(selection.get('jockey', {})),

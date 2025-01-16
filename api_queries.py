@@ -30,18 +30,14 @@ class Variables:
 
 @dataclass
 class MeetingsDateQueryVariables(Variables):
-    limit: int
     startDate: str
     endDate: str
-    country: str
     _type: QueryType = QueryType.MEETINGS_DATE
 
     def get_dict(self):
         return {
-            "limit": self.limit,
             "startDate": self.startDate,
-            "endDate": self.endDate,
-            "venue": {"country": self.country}
+            "endDate": self.endDate
         }
 
 
@@ -156,10 +152,10 @@ OPERATION_NAMES = {
 }
 
 QUERY_HASHES = {
-    QueryType.MEETINGS_DATE: "c60f0f85d96b77e70c7ce05d6ccf60229274ad0cf6e32a6b382c18b7a0dbeaa6",
+    QueryType.MEETINGS_DATE: "eebebbb4cfc256c6f5c0e41819110ae583f7a3478b717bbb9ff9b8139548f0d0",
     QueryType.MEETINGS_DATE_COUNTRY: "1a5b01a2238d2b290f819bbd98788d92f17b7bc39303e2058d47f44698fb1515",
     QueryType.MEETINGS_TIME: "b8b5bef7544da6d9bc3f601bf6e030a3de79ca24e168186b110692a4302bcbfb",
-    QueryType.MEETING_SLUG: "6d11913e7745daf6e5c2de9a5b72d7ad5a4f1ea82ad400832a198fe20fd2b2d2",
+    QueryType.MEETING_SLUG: "91ed6ecf049396a42ba0a67f441968fcdfa52ec8a989bcd126646029fce32905",
     QueryType.FULL_FORM: "1093c7bd100804b3372236e69b6da0549161408ca5ec53d5d72d1e2bc33eaaf1",
     QueryType.STATS: "388a5fa2d209f3f5a9c78c5cee87d5a4f9cbc1942c25a7f12f67036d79ab2a73",
     QueryType.EVENT: "0029451798d3780a964eef179e79ddad1f1074c93038774ec8626b8b22999e6d",
@@ -227,8 +223,11 @@ HEADERS = {
 
 
 class QueryRequest:
+    MAX_RETRIES = 5
+
     def __init__(self, query_info: QueryInfo):
         self.query_info = query_info
+        self.retry = 0
 
     def send_request(self) -> dict:
         if self.query_info.query_type == QueryType.ODDS:
@@ -246,13 +245,29 @@ class QueryRequest:
             params=self.query_info.get_query_params()
         )
         if response.status_code != 200:
-            print("Request failed")
-            print(response)
-            time.sleep(5)
-            return self.send_request()
-
+            return self.retry_request()
         try:
-            return response.json()
+            response_json = response.json()
+            if response_json.get('errors') is not None:
+                return {}
+            if self.query_info.query_type == QueryType.ODDS:
+                response_data = response_json.get('odds')
+            else:
+                response_data = response_json.get('data')
+            if response_data is not None:
+                if len(response_data) == 0:
+                    return {}
+            else:
+                return {}
+            return response_json
         except json.decoder.JSONDecodeError:
-            print(response)
-            raise ValueError("Invalid JSON response")
+            return self.retry_request()
+
+    def retry_request(self) -> dict:
+        self.retry += 1
+        if self.retry >= self.MAX_RETRIES:
+            print("Request failed after 5 retries")
+            return {}
+        print(f"Request: {self.query_info} failed. Retrying in 1 sec...")
+        time.sleep(2)
+        return self.send_request()

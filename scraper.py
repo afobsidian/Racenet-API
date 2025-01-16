@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from api_queries import QueryInfo, QueryRequest, QueryType, FullFormQueryVariables, \
     StatsQueryVariables, EventQueryVariables, MeetingsTimeQueryVariables, \
-    OddsQueryVariables, MeetingSlugQueryVariables, SectionalQueryVariables
+    OddsQueryVariables, MeetingSlugQueryVariables, SectionalQueryVariables, \
+    MeetingsDateQueryVariables
 
 from meetings_data import Meeting, Jockey, Trainer, Event, Selection, Prediction
 from typing import Optional
@@ -10,7 +11,7 @@ import multiprocessing
 
 class MeetingsScraper:
 
-    def create_meetings_query(self, scrape_date: datetime) -> QueryRequest:
+    def create_meetings_time_query(self, scrape_date: datetime) -> QueryRequest:
         scrape_date -= timedelta(days=1)
         start_of_day = scrape_date.replace(
             hour=13, minute=0, second=0, microsecond=0)
@@ -27,6 +28,16 @@ class MeetingsScraper:
             startTime=start_time, endTime=end_time, limit=100)
         meetings_query = QueryInfo(
             query_type=QueryType.MEETINGS_TIME,
+            variables=meetings_variables)
+        return QueryRequest(query_info=meetings_query)
+
+    def create_meetings_date_query(self, scrape_date: datetime) -> QueryRequest:
+        start_date = scrape_date.strftime("%Y-%m-%d")
+        end_date = scrape_date.strftime("%Y-%m-%d")
+        meetings_variables = MeetingsDateQueryVariables(
+            startDate=start_date, endDate=end_date)
+        meetings_query = QueryInfo(
+            query_type=QueryType.MEETINGS_DATE,
             variables=meetings_variables)
         return QueryRequest(query_info=meetings_query)
 
@@ -71,7 +82,7 @@ class MeetingsScraper:
             variables=SectionalQueryVariables(selectionIds=selection_ids))
         return QueryRequest(query_info=sectional_query)
 
-    def parse_meetings_response(self, response: dict) -> list[str]:
+    def parse_meetings_response_time(self, response: dict) -> list[str]:
         meetings_data = response.get('data')
         if meetings_data is None:
             return []
@@ -83,6 +94,27 @@ class MeetingsScraper:
             if meeting_group.get('group') == "Australia":
                 australia_meetings = meeting_group.get('meetings')
                 break
+
+        meeting_slugs = []
+        for meeting in australia_meetings:
+            meeting_slugs.append(meeting['slug'])
+        return meeting_slugs
+
+    def parse_meetings_response_date(self, response: dict) -> list[str]:
+        meetings_data = response.get('data')
+        if meetings_data is None:
+            return []
+        meetings_groups = meetings_data.get('meetings')
+        if meetings_groups is None:
+            return []
+        australia_meetings = []
+        for meeting in meetings_groups:
+            venue_data = meeting.get('venue')
+            if venue_data is not None:
+                country_data = venue_data.get('country')
+                if country_data is not None:
+                    if country_data.get('name') == "Australia":
+                        australia_meetings.append(meeting)
 
         meeting_slugs = []
         for meeting in australia_meetings:
@@ -188,10 +220,18 @@ class MeetingsScraper:
         return meeting
 
     def get_meetings(
-            self, scrape_date: datetime = datetime.now()) -> list[Meeting]:
-        meetings_request = self.create_meetings_query(scrape_date)
-        meetings_response = meetings_request.send_request()
-        meetings_slugs = self.parse_meetings_response(meetings_response)
+            self, scrape_date: datetime = datetime.now(),
+            time_query: bool = False) -> list[Meeting]:
+        if time_query:
+            meetings_request = self.create_meetings_time_query(scrape_date)
+            meetings_response = meetings_request.send_request()
+            meetings_slugs = self.parse_meetings_response_time(
+                meetings_response)
+        else:
+            meetings_request = self.create_meetings_date_query(scrape_date)
+            meetings_response = meetings_request.send_request()
+            meetings_slugs = self.parse_meetings_response_date(
+                meetings_response)
         with multiprocessing.Pool() as pool:
             meetings_list = pool.map(self.get_meeting, meetings_slugs)
         formatted_meeting_list: list[Meeting] = [
