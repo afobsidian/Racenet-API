@@ -1,5 +1,5 @@
-requests==2.32.3
-types-requests==2.32.0.20241016
-pyside6==6.8.1
-qdarkstyle==3.2.3
-numerize==0.12
+requests
+types-requests
+pyside6
+qdarkstyle
+numerize

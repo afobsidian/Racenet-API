@@ -1,8 +1,9 @@
-import requests
 import json
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-import time
+
+import requests
 
 BOOKMAKERS = ["racenetstandard"]
 BET_TYPES = ["fixed-win", "fixed-place"]
@@ -35,10 +36,7 @@ class MeetingsDateQueryVariables(Variables):
     _type: QueryType = QueryType.MEETINGS_DATE
 
     def get_dict(self):
-        return {
-            "startDate": self.startDate,
-            "endDate": self.endDate
-        }
+        return {"startDate": self.startDate, "endDate": self.endDate}
 
 
 @dataclass
@@ -52,7 +50,7 @@ class MeetingsDateCountryQueryVariables(Variables):
         return {
             "startDate": self.startDate,
             "endDate": self.endDate,
-            "country": self.country
+            "country": self.country,
         }
 
 
@@ -69,7 +67,7 @@ class MeetingsTimeQueryVariables(Variables):
             "startTime": self.startTime,
             "endTime": self.endTime,
             "limit": self.limit,
-            "sportIds": self.sports_id
+            "sportIds": self.sports_id,
         }
 
 
@@ -79,9 +77,7 @@ class MeetingSlugQueryVariables(Variables):
     _type: QueryType = QueryType.MEETING_SLUG
 
     def get_dict(self):
-        return {
-            "slug": self.slug
-        }
+        return {"slug": self.slug}
 
 
 @dataclass
@@ -91,10 +87,7 @@ class FullFormQueryVariables(Variables):
     _type: QueryType = QueryType.FULL_FORM
 
     def get_dict(self):
-        return {
-            "selectionIds": self.selectionIds,
-            "limit": self.limit
-        }
+        return {"selectionIds": self.selectionIds, "limit": self.limit}
 
 
 @dataclass
@@ -114,9 +107,7 @@ class StatsQueryVariables(Variables):
     _type: QueryType = QueryType.STATS
 
     def get_dict(self):
-        return {
-            "eventId": self.eventId
-        }
+        return {"eventId": self.eventId}
 
 
 @dataclass
@@ -125,9 +116,7 @@ class EventQueryVariables(Variables):
     _type: QueryType = QueryType.EVENT
 
     def get_dict(self):
-        return {
-            "eventId": self.eventId
-        }
+        return {"eventId": self.eventId}
 
 
 @dataclass
@@ -148,18 +137,18 @@ OPERATION_NAMES = {
     QueryType.FULL_FORM: "fullFormsBySelectionIds",
     QueryType.STATS: "statsByEventId",
     QueryType.EVENT: "eventById",
-    QueryType.SECTIONAL: "getSectionalsBySelectionIds"
+    QueryType.SECTIONAL: "getSectionalsBySelectionIds",
 }
 
 QUERY_HASHES = {
-    QueryType.MEETINGS_DATE: "eebebbb4cfc256c6f5c0e41819110ae583f7a3478b717bbb9ff9b8139548f0d0",
-    QueryType.MEETINGS_DATE_COUNTRY: "1a5b01a2238d2b290f819bbd98788d92f17b7bc39303e2058d47f44698fb1515",
-    QueryType.MEETINGS_TIME: "b8b5bef7544da6d9bc3f601bf6e030a3de79ca24e168186b110692a4302bcbfb",
-    QueryType.MEETING_SLUG: "91ed6ecf049396a42ba0a67f441968fcdfa52ec8a989bcd126646029fce32905",
-    QueryType.FULL_FORM: "1093c7bd100804b3372236e69b6da0549161408ca5ec53d5d72d1e2bc33eaaf1",
-    QueryType.STATS: "388a5fa2d209f3f5a9c78c5cee87d5a4f9cbc1942c25a7f12f67036d79ab2a73",
-    QueryType.EVENT: "0029451798d3780a964eef179e79ddad1f1074c93038774ec8626b8b22999e6d",
-    QueryType.SECTIONAL: "30fdad94a3a7256f1a98b824e58a3894cf605f6d87b8d611e62014db1d1be937"
+    QueryType.MEETINGS_DATE: "223af3d0cbfa0a25e744c34941835eca3a91e6dbc8f121128fa2acd7361c2062",
+    QueryType.MEETINGS_DATE_COUNTRY: "7e3f50657b051fdfd5059245f55682fba76f14c6898e6f9de3b7653205195f0c",
+    QueryType.MEETINGS_TIME: "80eb89d41ec583cd84078e2ee7eaa572bcdaae0432ee70c4fda1eb8bda246e8d",
+    QueryType.MEETING_SLUG: "30b5f201bc6d0e3e0be17ef11aec04f9803bf247470901ce2a25b6302749890a",
+    QueryType.FULL_FORM: "ed7986a7b3dfaafe2e3801a9b04e7941c2e5291ef97d2cb6d2de2a1b9c6662f1",
+    QueryType.STATS: "5e6e59dd2725d40f214cc3d4680b9934660f9fd1b89c2d8111b22d30f8c03dc6",
+    QueryType.EVENT: "e3b81390da61a249b6ac57e49f2bfaae735b196e887f7bbe68acbd8cefb01a2c",
+    QueryType.SECTIONAL: "d5053915e37d607da7348445800272b012f29de6c8aa34cefa9d1f004a8cb3fd",
 }
 
 
@@ -172,9 +161,8 @@ class QueryInfo:
         if self.variables._type != self.query_type:
             raise ValueError("Variables type does not match operation type")
         if self.query_type == QueryType.ODDS:
-            if type(self.variables) != OddsQueryVariables:
-                raise ValueError(
-                    "Variables type does not match operation type")
+            if not isinstance(self.variables, OddsQueryVariables):
+                raise ValueError("Variables type does not match operation type")
             params = {
                 "bookmaker": ",".join(self.variables.bookmakers),
                 "betTypes": ",".join(self.variables.betTypes),
@@ -186,12 +174,14 @@ class QueryInfo:
             params = {
                 "operationName": self.get_operation_name(),
                 "variables": json.dumps(self.variables.get_dict()),
-                "extensions": json.dumps({
-                    "persistedQuery": {
-                        "version": 1,
-                        "sha256Hash": self.get_query_hash()
+                "extensions": json.dumps(
+                    {
+                        "persistedQuery": {
+                            "version": 1,
+                            "sha256Hash": self.get_query_hash(),
+                        }
                     }
-                })
+                ),
             }
         return params
 
@@ -218,7 +208,7 @@ HEADERS = {
     "sec-fetch-dest": "empty",
     "sec-fetch-mode": "cors",
     "sec-fetch-site": "cross-site",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 }
 
 
@@ -231,29 +221,28 @@ class QueryRequest:
 
     def send_request(self) -> dict:
         if self.query_info.query_type == QueryType.ODDS:
-            if type(self.query_info.variables) != OddsQueryVariables:
-                raise ValueError(
-                    "Variables type does not match operation type")
+            if not isinstance(self.query_info.variables, OddsQueryVariables):
+                raise ValueError("Variables type does not match operation type")
 
-            request_url = f"https://puntapi.com/odds/au/event/{self.query_info.variables.eventId}"
+            request_url = (
+                f"https://puntapi.com/odds/au/event/{self.query_info.variables.eventId}"
+            )
         else:
             request_url = "https://puntapi.com/graphql-horse-racing"
 
         response = requests.get(
-            request_url,
-            headers=HEADERS,
-            params=self.query_info.get_query_params()
+            request_url, headers=HEADERS, params=self.query_info.get_query_params()
         )
         if response.status_code != 200:
             return self.retry_request()
         try:
             response_json = response.json()
-            if response_json.get('errors') is not None:
+            if response_json.get("errors") is not None:
                 return {}
             if self.query_info.query_type == QueryType.ODDS:
-                response_data = response_json.get('odds')
+                response_data = response_json.get("odds")
             else:
-                response_data = response_json.get('data')
+                response_data = response_json.get("data")
             if response_data is not None:
                 if len(response_data) == 0:
                     return {}
