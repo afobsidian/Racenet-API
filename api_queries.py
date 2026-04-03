@@ -2,6 +2,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 import requests
 
@@ -140,16 +141,46 @@ OPERATION_NAMES = {
     QueryType.SECTIONAL: "getSectionalsBySelectionIds",
 }
 
-QUERY_HASHES = {
+QUERY_HASHES_FILE = Path(__file__).with_name("query_hashes.json")
+
+DEFAULT_QUERY_HASHES = {
     QueryType.MEETINGS_DATE: "223af3d0cbfa0a25e744c34941835eca3a91e6dbc8f121128fa2acd7361c2062",
     QueryType.MEETINGS_DATE_COUNTRY: "7e3f50657b051fdfd5059245f55682fba76f14c6898e6f9de3b7653205195f0c",
     QueryType.MEETINGS_TIME: "80eb89d41ec583cd84078e2ee7eaa572bcdaae0432ee70c4fda1eb8bda246e8d",
-    QueryType.MEETING_SLUG: "30b5f201bc6d0e3e0be17ef11aec04f9803bf247470901ce2a25b6302749890a",
+    QueryType.MEETING_SLUG: "e353a397746c38cbbc7efdf98495314692e10654532d8cc26fe0aeae7aa97058",
     QueryType.FULL_FORM: "ed7986a7b3dfaafe2e3801a9b04e7941c2e5291ef97d2cb6d2de2a1b9c6662f1",
     QueryType.STATS: "5e6e59dd2725d40f214cc3d4680b9934660f9fd1b89c2d8111b22d30f8c03dc6",
-    QueryType.EVENT: "e3b81390da61a249b6ac57e49f2bfaae735b196e887f7bbe68acbd8cefb01a2c",
+    QueryType.EVENT: "8fff49d83321193fce3b3a0c39bdcff4c74dc0725feede61b6b726c84d76845d",
     QueryType.SECTIONAL: "d5053915e37d607da7348445800272b012f29de6c8aa34cefa9d1f004a8cb3fd",
 }
+
+
+def load_query_hashes() -> dict[QueryType, str]:
+    query_hashes = DEFAULT_QUERY_HASHES.copy()
+
+    try:
+        with QUERY_HASHES_FILE.open("r", encoding="utf-8") as hash_file:
+            file_hashes = json.load(hash_file)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return query_hashes
+
+    if not isinstance(file_hashes, dict):
+        return query_hashes
+
+    for query_type_name, query_hash in file_hashes.items():
+        if not isinstance(query_type_name, str) or not isinstance(query_hash, str):
+            continue
+        try:
+            query_type = QueryType[query_type_name]
+        except KeyError:
+            continue
+        if query_hash:
+            query_hashes[query_type] = query_hash
+
+    return query_hashes
+
+
+QUERY_HASHES = load_query_hashes()
 
 
 @dataclass

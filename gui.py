@@ -5,12 +5,13 @@ import sys
 from datetime import datetime
 from difflib import SequenceMatcher
 from textwrap import shorten
-from typing import Optional, Union
+from typing import Callable, Optional, Union, cast
 
-import qdarkstyle
-from numerize import numerize
+import qdarkstyle  # type: ignore[import-untyped]
+from numerize import numerize  # type: ignore[import-untyped]
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from app_state import AppState, meeting_key
 from meetings_data import (
     SPELL_THRESHOLD,
     Event,
@@ -29,9 +30,11 @@ from meetings_data import (
     group_by_state,
 )
 from scraper import MeetingsScraper
+from workers import MeetingsLoadWorker
 
 SCREEN_SIZE = QtCore.QSize()
 FONT = "Helvetica"
+ANALYSIS_VIEWS: list[tuple[str, str, Callable[[Event], QtWidgets.QWidget]]] = []
 
 
 def screen_width_percentage(percentage: float) -> int:
@@ -42,31 +45,64 @@ def screen_height_percentage(percentage: float) -> int:
     return int(SCREEN_SIZE.height() * percentage)
 
 
+def qt_alignment(*flags: QtCore.Qt.AlignmentFlag) -> QtCore.Qt.AlignmentFlag:
+    value = 0
+    for flag in flags:
+        value |= int(flag)
+    return QtCore.Qt.AlignmentFlag(value)
+
+
+def parse_event_time_label(value: str) -> datetime:
+    text = value.strip()
+    if not text:
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    time_part, meridiem = text.rsplit(" ", 1)
+    hour_text, minute_text = time_part.split(":", 1)
+    hour = int(hour_text)
+    minute = int(minute_text)
+    meridiem = meridiem.upper()
+
+    if meridiem == "AM":
+        hour = 0 if hour == 12 else hour
+    elif meridiem == "PM":
+        hour = 12 if hour == 12 else hour + 12
+    else:
+        raise ValueError(f"Unsupported time label: {value}")
+
+    return datetime.now().replace(
+        hour=hour,
+        minute=minute,
+        second=0,
+        microsecond=0,
+    )
+
+
 class EventTickTimer(QtCore.QTimer):
     def __init__(self, event: Event):
         super(EventTickTimer, self).__init__()
-        self.event_time = datetime.strptime(event.time, "%I:%M %p")
+        self.event_time = parse_event_time_label(event.time)
 
 
 class TitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(TitleLabel, self).__init__(text)
         self.setFont(QtGui.QFont(FONT, 26, weight=QtGui.QFont.Weight.Bold))
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
 
 
 class SubtitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(SubtitleLabel, self).__init__(text)
         self.setFont(QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold))
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
 
 
 class HeadingLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(HeadingLabel, self).__init__(text)
         self.setFont(QtGui.QFont(FONT, 10, weight=QtGui.QFont.Weight.Bold))
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
 
 
 class InfoLabel(QtWidgets.QLabel):
@@ -81,14 +117,14 @@ class InfoLabel(QtWidgets.QLabel):
             text = str(data)
         super(InfoLabel, self).__init__(text)
         self.setFont(QtGui.QFont(FONT, font_size))
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
         self.setStyleSheet("background-color: transparent;")
 
 
 class LargeInfoLabel(InfoLabel):
     def __init__(self, data: Union[str, int, float, object]):
         super(LargeInfoLabel, self).__init__(data, 14)
-        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
 
 
 class SmallInfoLabel(InfoLabel):
@@ -133,6 +169,295 @@ class HorizontalBar(QtWidgets.QFrame):
         value = int((self.value / self.max_value) * self.width())
         self.setFixedWidth(value)
         self.setStyleSheet("background-color: #00FF00; border-radius: 5;")
+
+
+class FlowLayout(QtWidgets.QLayout):
+    def __init__(self, parent=None, margin=0, h_spacing=-1, v_spacing=-1):
+        super().__init__(parent)
+        if parent is not None:
+            self.setContentsMargins(margin, margin, margin, margin)
+        self._items: list[QtWidgets.QLayoutItem] = []
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+
+    def __del__(self):
+        while self.count():
+            self.takeAt(0)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return QtCore.Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QtCore.QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QtCore.QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QtCore.QSize(
+            margins.left() + margins.right(), margins.top() + margins.bottom()
+        )
+        return size
+
+    def horizontalSpacing(self):
+        if self._h_spacing >= 0:
+            return self._h_spacing
+        return self._smart_spacing(
+            QtWidgets.QStyle.PixelMetric.PM_LayoutHorizontalSpacing
+        )
+
+    def verticalSpacing(self):
+        if self._v_spacing >= 0:
+            return self._v_spacing
+        return self._smart_spacing(
+            QtWidgets.QStyle.PixelMetric.PM_LayoutVerticalSpacing
+        )
+
+    def _do_layout(self, rect: QtCore.QRect, test_only: bool):
+        margins = self.contentsMargins()
+        left = margins.left()
+        top = margins.top()
+        right = margins.right()
+        bottom = margins.bottom()
+        effective_rect = rect.adjusted(+left, +top, -right, -bottom)
+        x = effective_rect.x()
+        y = effective_rect.y()
+        line_height = 0
+        spacing_x = max(8, self.horizontalSpacing())
+        spacing_y = max(8, self.verticalSpacing())
+
+        for item in self._items:
+            next_x = x + item.sizeHint().width() + spacing_x
+            if next_x - spacing_x > effective_rect.right() and line_height > 0:
+                x = effective_rect.x()
+                y = y + line_height + spacing_y
+                next_x = x + item.sizeHint().width() + spacing_x
+                line_height = 0
+
+            if not test_only:
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), item.sizeHint()))
+
+            x = next_x
+            line_height = max(line_height, item.sizeHint().height())
+
+        return y + line_height - rect.y() + bottom
+
+    def _smart_spacing(self, pixel_metric):
+        parent = self.parent()
+        if parent is None:
+            return 8
+        if isinstance(parent, QtWidgets.QWidget):
+            return parent.style().pixelMetric(pixel_metric, None, parent)
+        return 8
+
+
+class DetailChip(QtWidgets.QFrame):
+    def __init__(
+        self,
+        title: str,
+        value: str,
+        tooltip: str = "",
+        accent: str = "",
+    ):
+        super().__init__()
+        self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        self.setObjectName("detailChip")
+        self.setStyleSheet(
+            "QFrame#detailChip {"
+            "background-color: rgba(255, 255, 255, 0.05);"
+            "border: 1px solid rgba(255, 255, 255, 0.08);"
+            "border-radius: 8px;"
+            "}"
+        )
+        self.setMinimumWidth(112)
+        layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(2)
+        self.setLayout(layout)
+
+        title_label = QtWidgets.QLabel(title.upper())
+        title_label.setStyleSheet("color: #9fb0bd; background-color: transparent;")
+        title_font = QtGui.QFont(FONT, 8)
+        title_font.setCapitalization(QtGui.QFont.Capitalization.AllUppercase)
+        title_label.setFont(title_font)
+
+        value_label = QtWidgets.QLabel(value)
+        value_label.setWordWrap(True)
+        value_label.setStyleSheet("background-color: transparent;")
+        if accent:
+            value_label.setStyleSheet(
+                f"background-color: transparent; color: {accent}; font-weight: 600;"
+            )
+
+        self.value_label = value_label
+        layout.addWidget(title_label)
+        layout.addWidget(value_label)
+        if tooltip:
+            self.setToolTip(tooltip)
+
+    def set_value(self, value: str):
+        self.value_label.setText(value)
+
+    def set_tooltip(self, tooltip: str):
+        self.setToolTip(tooltip)
+
+
+def format_price(price: float) -> str:
+    if price > 20:
+        return f"${price:.0f}"
+    return f"${price:.2f}"
+
+
+def accent_from_score(score: int) -> str:
+    if score >= 3:
+        return "#d503ff"
+    if score == 2:
+        return "red"
+    if score == 1:
+        return "orange"
+    return ""
+
+
+def selection_odds(selection: Selection) -> tuple[float, float]:
+    win_prices = [odds.price for odds in selection.odds if odds.bet_type == "Win"]
+    place_prices = [odds.price for odds in selection.odds if odds.bet_type == "Place"]
+    win_odds = win_prices[0] if win_prices else 0.0
+    place_odds = place_prices[0] if place_prices else 0.0
+    return win_odds, place_odds
+
+
+def position_at_distance(run: Run, distance: int) -> int:
+    for position_summary in run.position_summaries:
+        if (
+            position_summary.distance == distance
+            and position_summary.position is not None
+        ):
+            return position_summary.position
+    return 0
+
+
+def format_run_margin(run: Run) -> str:
+    if run.margin is None:
+        return "-"
+    if run.margin == 0.00:
+        if run.second_margin is not None:
+            return f"+{run.second_margin}"
+        return f"{run.margin}"
+    return f"{run.margin}"
+
+
+def format_run_price(run: Run) -> str:
+    if run.fluctuation is None or run.fluctuation == 0.00:
+        return f"${run.open_price}/${run.starting_price}"
+    return f"${run.open_price}/${run.fluctuation}/${run.starting_price}"
+
+
+def run_sectional_value(run: Run, distance: int) -> Union[str, float]:
+    if distance == 800:
+        if (
+            run.splits.runner_split_l600 is None
+            or run.splits.runner_split_l400 is None
+            or run.splits.runner_split_l200 is None
+            or run.splits.runner_split_finish is None
+        ):
+            return "-"
+        return (
+            run.splits.runner_split_l600
+            + run.splits.runner_split_l400
+            + run.splits.runner_split_l200
+            + run.splits.runner_split_finish
+        )
+    if distance == 600:
+        if (
+            run.splits.runner_split_l400 is None
+            or run.splits.runner_split_l200 is None
+            or run.splits.runner_split_finish is None
+        ):
+            return "-"
+        return (
+            run.splits.runner_split_l400
+            + run.splits.runner_split_l200
+            + run.splits.runner_split_finish
+        )
+    if distance == 400:
+        if (
+            run.splits.runner_split_l200 is None
+            or run.splits.runner_split_finish is None
+        ):
+            return "-"
+        return run.splits.runner_split_l200 + run.splits.runner_split_finish
+    if distance == 200:
+        if run.splits.runner_split_finish is None:
+            return "-"
+        return run.splits.runner_split_finish
+    return "-"
+
+
+def format_sectional_display(
+    value: Union[str, float, int, None], position: int = 0
+) -> str:
+    if isinstance(value, (int, float)):
+        minutes, seconds = divmod(value, 60)
+        if minutes > 0:
+            text = f"{minutes:.0f}:{seconds:.2f}"
+        else:
+            text = f"{seconds:.2f}"
+    elif value is None:
+        text = "-"
+    else:
+        text = str(value)
+    if position:
+        text += f" [{position}]"
+    return text
+
+
+def benchmark_accent(
+    benchmark: Optional[float], race_rank: int, meeting_rank: int
+) -> str:
+    score = 0
+    if benchmark is not None and benchmark <= -1.5:
+        score += 1
+    if race_rank == 1:
+        score += 1
+    if meeting_rank != 0 and meeting_rank <= 5:
+        score += 1
+    return accent_from_score(score)
+
+
+def cleaned_winner_time(run: Run) -> str:
+    if run.winner_time is None or len(run.winner_time) == 0:
+        return "-"
+    winner_time = run.winner_time[:-1]
+    if winner_time and winner_time[0] == "0":
+        winner_time = winner_time[1:]
+    return winner_time
 
 
 class TempoWidget(QtWidgets.QWidget):
@@ -372,6 +697,7 @@ class RunsWidget(QtWidgets.QWidget):
 
         finish_pos_label = SmallInfoLabel(f"{run.finish_position} of {run.starters}")
         finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
+
         tooltip = ""
         if run.winner_name is not None:
             tooltip += f"1st: {run.winner_name}"
@@ -384,16 +710,9 @@ class RunsWidget(QtWidgets.QWidget):
         finish_pos_label.setToolTip(tooltip)
         layout.addWidget(finish_pos_label)
 
-        if run.margin is None:
-            margin_label = SmallInfoLabel(" - ")
-        elif run.margin == 0.00:
-            if run.second_margin is not None:
-                margin_label = SmallInfoLabel(f"+{run.second_margin}")
-            else:
-                margin_label = SmallInfoLabel(run.margin)
-        else:
-            margin_label = SmallInfoLabel(run.margin)
+        margin_label = SmallInfoLabel(format_run_margin(run))
         margin_label.setFixedWidth(screen_width_percentage(0.021))
+
         tooltip = ""
         if run.second_margin is not None:
             tooltip += f"2nd Margin: {run.second_margin}"
@@ -437,12 +756,7 @@ class RunsWidget(QtWidgets.QWidget):
         layout.addWidget(jockey_label)
 
         if not run.is_trial:
-            if run.fluctuation is None or run.fluctuation == 0.00:
-                price_label = SmallInfoLabel(f"${run.open_price}/${run.starting_price}")
-            else:
-                price_label = SmallInfoLabel(
-                    f"${run.open_price}/${run.fluctuation}/${run.starting_price}"
-                )
+            price_label = SmallInfoLabel(format_run_price(run))
             price_label.setFixedWidth(screen_width_percentage(0.051))
             layout.addWidget(price_label)
 
@@ -459,110 +773,59 @@ class RunsWidget(QtWidgets.QWidget):
             layout.addSpacerItem(QtWidgets.QSpacerItem(2, 0))
 
         if not run.is_trial:
-            if (
-                run.splits.runner_split_l600 is None
-                or run.splits.runner_split_l400 is None
-                or run.splits.runner_split_l200 is None
-                or run.splits.runner_split_finish is None
-            ):
-                l800_sectional = " - "
-            else:
-                l800_sectional = (
-                    run.splits.runner_split_l600
-                    + run.splits.runner_split_l400
-                    + run.splits.runner_split_l200
-                    + run.splits.runner_split_finish
+            sectional_specs = [
+                (
+                    "L800",
+                    800,
+                    run.form_benchmark.runner_time_difference_l800,
+                    run.form_benchmark.runner_race_position_l800,
+                    run.form_benchmark.runner_meeting_position_l800,
+                ),
+                (
+                    "L600",
+                    600,
+                    run.form_benchmark.runner_time_difference_l600,
+                    run.form_benchmark.runner_race_position_l600,
+                    run.form_benchmark.runner_meeting_position_l600,
+                ),
+                (
+                    "L400",
+                    400,
+                    run.form_benchmark.runner_time_difference_l400,
+                    run.form_benchmark.runner_race_position_l400,
+                    run.form_benchmark.runner_meeting_position_l400,
+                ),
+                (
+                    "L200",
+                    200,
+                    run.form_benchmark.runner_time_difference_l200,
+                    run.form_benchmark.runner_race_position_l200,
+                    run.form_benchmark.runner_meeting_position_l200,
+                ),
+            ]
+            for label, distance, benchmark, race_rank, meeting_rank in sectional_specs:
+                position = position_at_distance(run, distance)
+                value = run_sectional_value(run, distance)
+                tooltip = ""
+                if benchmark is not None:
+                    tooltip += f"Benchmark: {benchmark:.1f}"
+                if race_rank is not None:
+                    tooltip += f"\nRace Rank: {race_rank}"
+                if meeting_rank is not None:
+                    tooltip += f"\nMeeting Rank: {meeting_rank}"
+                sectional_label = SectionalWidget(
+                    value,
+                    benchmark,
+                    race_rank,
+                    meeting_rank,
+                    position,
                 )
-
-            l800_position = 0
-            for position_summary in run.position_summaries:
-                if position_summary.distance == 800:
-                    if position_summary.position is not None:
-                        l800_position = position_summary.position
-                        break
-            l800_sectional_label = SectionalWidget(
-                l800_sectional,
-                run.form_benchmark.runner_time_difference_l800,
-                run.form_benchmark.runner_race_position_l800,
-                run.form_benchmark.runner_meeting_position_l800,
-                l800_position,
-            )
-            l800_sectional_label.setFixedWidth(screen_width_percentage(0.035))
-            layout.addWidget(l800_sectional_label)
-
-            if (
-                run.splits.runner_split_l600 is None
-                or run.splits.runner_split_l400 is None
-                or run.splits.runner_split_finish is None
-            ):
-                l600_sectional = " - "
-            else:
-                l600_sectional = (
-                    run.splits.runner_split_l400
-                    + run.splits.runner_split_l200
-                    + run.splits.runner_split_finish
-                )
-            l600_position = 0
-            for position_summary in run.position_summaries:
-                if position_summary.distance == 600:
-                    if position_summary.position is not None:
-                        l600_position = position_summary.position
-                        break
-
-            l600_sectional_label = SectionalWidget(
-                l600_sectional,
-                run.form_benchmark.runner_time_difference_l600,
-                run.form_benchmark.runner_race_position_l600,
-                run.form_benchmark.runner_meeting_position_l600,
-                l600_position,
-            )
-            l600_sectional_label.setFixedWidth(screen_width_percentage(0.035))
-            layout.addWidget(l600_sectional_label)
-
-            if (
-                run.splits.runner_split_l400 is None
-                or run.splits.runner_split_finish is None
-            ):
-                l400_sectional = " - "
-            else:
-                l400_sectional = (
-                    run.splits.runner_split_l200 + run.splits.runner_split_finish
-                )
-            l400_position = 0
-            for position_summary in run.position_summaries:
-                if position_summary.distance == 400:
-                    if position_summary.position is not None:
-                        l400_position = position_summary.position
-                        break
-            l400_sectional_label = SectionalWidget(
-                l400_sectional,
-                run.form_benchmark.runner_time_difference_l400,
-                run.form_benchmark.runner_race_position_l400,
-                run.form_benchmark.runner_meeting_position_l400,
-                l400_position,
-            )
-            l400_sectional_label.setFixedWidth(screen_width_percentage(0.035))
-            layout.addWidget(l400_sectional_label)
-
-            if run.splits.runner_split_finish is None:
-                l200_sectional = " - "
-            else:
-                l200_sectional = run.splits.runner_split_finish
-            l200_position = 0
-            for position_summary in run.position_summaries:
-                if position_summary.distance == 200:
-                    if position_summary.position is not None:
-                        l200_position = position_summary.position
-                        break
-            l200_sectional_label = SectionalWidget(
-                l200_sectional,
-                run.form_benchmark.runner_time_difference_l200,
-                run.form_benchmark.runner_race_position_l200,
-                run.form_benchmark.runner_meeting_position_l200,
-                l200_position,
-            )
-            l200_sectional_label.setFixedWidth(screen_width_percentage(0.025))
-            layout.addWidget(l200_sectional_label)
+                if distance == 200:
+                    sectional_label.setFixedWidth(screen_width_percentage(0.025))
+                else:
+                    sectional_label.setFixedWidth(screen_width_percentage(0.035))
+                sectional_label.setToolTip(tooltip)
+                layout.addWidget(sectional_label)
 
             overall_time_label = SectionalWidget(
                 run.finish_time,
@@ -574,15 +837,15 @@ class RunsWidget(QtWidgets.QWidget):
             overall_time_label.setFixedWidth(screen_width_percentage(0.04))
             layout.addWidget(overall_time_label)
 
-            if run.winner_time is not None and len(run.winner_time) > 0:
-                run.winner_time = run.winner_time[:-1]
-                if run.winner_time[0] == "0":
-                    run.winner_time = run.winner_time[1:]
-                winner_time_label = SectionalWidget(
-                    run.winner_time, run.form_benchmark.winner_time_difference, 0, 0, 0
-                )
-                winner_time_label.setFixedWidth(screen_width_percentage(0.03))
-                layout.addWidget(winner_time_label)
+            winner_time_label = SectionalWidget(
+                cleaned_winner_time(run),
+                run.form_benchmark.winner_time_difference,
+                0,
+                0,
+                0,
+            )
+            winner_time_label.setFixedWidth(screen_width_percentage(0.03))
+            layout.addWidget(winner_time_label)
 
             runner_tempo_label = TempoWidget(
                 run.form_benchmark.runner_tempo_difference,
@@ -626,7 +889,7 @@ class SpellWidget(QtWidgets.QWidget):
         layout.setSpacing(1)
         layout.setContentsMargins(2, 2, 2, 2)
         days_since_label = HeadingLabel(f"Spell {days_since_last} days")
-        days_since_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        days_since_label.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
         hline_start = QHLine()
         hline_start.setStyleSheet(hline_start.styleSheet() + "border-radius: 2;")
         layout.addWidget(hline_start)
@@ -642,28 +905,142 @@ class SelectionWidget(QtWidgets.QWidget):
     def __init__(self, selection: Selection, venue: str):
         super(SelectionWidget, self).__init__()
         self.selection = selection
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(
+            "background-color: rgba(255, 255, 255, 0.04); border-radius: 10px;"
+        )
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
-        layout.setSpacing(1)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 8, 10, 8)
+
         name_label = LargeInfoLabel(f"{selection.number}. {selection.name}")
-        name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
-        name_label.setFixedWidth(screen_width_percentage(0.15))
-        layout.addWidget(name_label)
+        name_label.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
+        name_label.setWordWrap(False)
+        name_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        layout.addWidget(name_label, 1)
+
+        win_odds, place_odds = selection_odds(selection)
+        odds_text = f"{format_price(win_odds)} / {format_price(place_odds)}"
+
         weight_string = f"{selection.weight}kg"
         if selection.claim != 0:
             weight_string += f" (a{selection.claim})"
-        runs_widget = SmallInfoLabel(
-            f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}"
+
+        speed_position = selection.prediction.normalized_speed_position
+        if speed_position is not None:
+            speed_position = speed_position.capitalize()
+
+        def ordinal(n):
+            return "%d%s" % (
+                n,
+                "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4],
+            )
+
+        score = 0
+        win_percentage, average_difference, std_dev = (
+            selection.preparation_stats.get_preparation_stats(
+                selection.runs_since_spell
+            )
         )
-        runs_widget.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(runs_widget, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
-        weight_label = SmallInfoLabel(weight_string)
-        weight_label.setFixedWidth(screen_width_percentage(0.048))
-        layout.addWidget(weight_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
-        barrier_label = SmallInfoLabel(f"{selection.barrier}")
-        barrier_label.setFixedWidth(screen_width_percentage(0.02))
-        layout.addWidget(barrier_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        if win_percentage is not None and win_percentage >= 0.33:
+            score += 1
+        if average_difference is not None and average_difference <= -1:
+            score += 1
+        if std_dev is not None and std_dev != 0.00 and std_dev <= 0.5:
+            score += 1
+        prep_accent = accent_from_score(score)
+        tooltip = ""
+        if win_percentage is not None:
+            tooltip += f"Win Percentage\n{win_percentage * 100:.0f}%"
+        if average_difference is not None:
+            tooltip += f"\nAverage Difference\n{average_difference:.2f}"
+        if std_dev is not None:
+            tooltip += f"\nStandard Deviation\n{std_dev:.2f}"
+
+        if selection.days_since_last is None or selection.days_since_last == 0:
+            days_since_text = "Unraced"
+        else:
+            days_since_text = f"{selection.days_since_last} days"
+
+        summary_values = [
+            ("Wt", weight_string, "", ""),
+            ("Bar", str(selection.barrier), "", ""),
+            ("Speed", speed_position or "-", "", ""),
+            ("Odds", odds_text, "", ""),
+            (
+                "ROI",
+                f"{selection.roi:.0f}%",
+                "",
+                "orange" if selection.roi > 0 else "",
+            ),
+            (
+                "Prep",
+                f"{ordinal(selection.runs_since_spell + 1)} up",
+                tooltip,
+                prep_accent,
+            ),
+            ("Fresh", days_since_text, "", ""),
+        ]
+
+        for title, value, label_tooltip, accent in summary_values:
+            summary_label = SmallInfoLabel(f"{title}: {value}")
+            summary_label.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
+            if label_tooltip:
+                summary_label.setToolTip(label_tooltip)
+            if accent:
+                summary_label.setStyleSheet(
+                    summary_label.styleSheet() + f"color: {accent};"
+                )
+            layout.addWidget(summary_label)
+
+        layout.addStretch()
+        self.install_click_filters()
+
+    def install_click_filters(self):
+        self.installEventFilter(self)
+        for child in self.findChildren(QtWidgets.QWidget):
+            child.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if (
+            event.type() == QtCore.QEvent.Type.MouseButtonPress
+            and event.button() == QtCore.Qt.MouseButton.LeftButton
+        ):
+            self.clicked.emit()
+            return True
+        elif (
+            event.type() == QtCore.QEvent.Type.MouseButtonPress
+            and event.button() == QtCore.Qt.MouseButton.RightButton
+        ):
+            # copy selection name and number to clipboard
+            clipboard = QtWidgets.QApplication.clipboard()
+            clipboard.setText(
+                f"Rx {self.selection.number}. {self.selection.name}: Medium"
+            )
+        return False
+
+
+class SelectionDetailsWidget(QtWidgets.QWidget):
+    def __init__(self, selection: Selection, venue: str):
+        super(SelectionDetailsWidget, self).__init__()
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignTop))
 
         trainer_label_text = "T: " + selection.trainer.name
         if selection.trainer.location is not None:
@@ -696,8 +1073,6 @@ class SelectionWidget(QtWidgets.QWidget):
         if selection.trainer_jockey_win_percentage is not None:
             tooltip += f"\nTrainer Jockey Win Percentage\n{selection.trainer_jockey_win_percentage:.0f}%"
         trainer_label.setToolTip(tooltip)
-        trainer_label.setFixedWidth(screen_width_percentage(0.1))
-        layout.addWidget(trainer_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
         jockey_label = SmallInfoLabel("J: " + selection.jockey.name)
         score = 0
@@ -715,7 +1090,6 @@ class SelectionWidget(QtWidgets.QWidget):
             jockey_label.setStyleSheet(jockey_label.styleSheet() + "color: orange;")
         elif score == 2:
             jockey_label.setStyleSheet(jockey_label.styleSheet() + "color: red;")
-        jockey_label.setFixedWidth(screen_width_percentage(0.09))
         tooltip = ""
         if selection.jockey.last_year_win_percentage is not None:
             tooltip += f"Last Year Win Percentage\n{selection.jockey.last_year_win_percentage * 100:.0f}%"
@@ -724,45 +1098,23 @@ class SelectionWidget(QtWidgets.QWidget):
         if selection.trainer_jockey_win_percentage is not None:
             tooltip += f"\nTrainer Jockey Win Percentage\n{selection.trainer_jockey_win_percentage:.0f}%"
         jockey_label.setToolTip(tooltip)
-        layout.addWidget(jockey_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        people_layout = QtWidgets.QHBoxLayout()
+        people_layout.setContentsMargins(0, 0, 0, 0)
+        people_layout.setSpacing(12)
+        trainer_label.setWordWrap(True)
+        jockey_label.setWordWrap(True)
+        people_layout.addWidget(trainer_label, 1)
+        people_layout.addWidget(jockey_label, 1)
+        layout.addLayout(people_layout)
 
         speed_position = selection.prediction.normalized_speed_position
         if speed_position is not None:
             speed_position = speed_position.capitalize()
-        speed_position_label = SmallInfoLabel(speed_position)
-        speed_position_label.setFixedWidth(screen_width_percentage(0.053))
-        layout.addWidget(
-            speed_position_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter
-        )
-        # get all bet365 win odds
-        odds = [odds.price for odds in selection.odds if odds.bet_type == "Win"]
-        if len(odds) > 0:
-            win_odds = odds[0]
-        else:
-            win_odds = 0.00
 
-        odds = [odds.price for odds in selection.odds if odds.bet_type == "Place"]
-        if len(odds) > 0:
-            place_odds = odds[0]
-        else:
-            place_odds = 0.00
-        if win_odds > 20:
-            win_odds_string = f"${win_odds:.0f}"
-        else:
-            win_odds_string = f"${win_odds:.2f}"
-        if place_odds > 20:
-            place_odds_string = f"${place_odds:.0f}"
-        else:
-            place_odds_string = f"${place_odds:.2f}"
-        odds_label = SmallInfoLabel(f"{win_odds_string}\t{place_odds_string}")
-        odds_label.setFixedWidth(screen_width_percentage(0.07))
-        layout.addWidget(odds_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
-
-        roi_label = SmallInfoLabel(f"ROI: {selection.roi:.0f}%")
-        if selection.roi > 0:
-            roi_label.setStyleSheet(roi_label.styleSheet() + "color: orange;")
-        roi_label.setFixedWidth(screen_width_percentage(0.052))
-        layout.addWidget(roi_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        weight_string = f"{selection.weight}kg"
+        if selection.claim != 0:
+            weight_string += f" (a{selection.claim})"
 
         def ordinal(n):
             return "%d%s" % (
@@ -770,8 +1122,6 @@ class SelectionWidget(QtWidgets.QWidget):
                 "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4],
             )
 
-        prep_label = SmallInfoLabel(f"{ordinal(selection.runs_since_spell + 1)} up")
-        prep_label.setFixedWidth(screen_width_percentage(0.035))
         score = 0
         win_percentage, average_difference, std_dev = (
             selection.preparation_stats.get_preparation_stats(
@@ -784,12 +1134,7 @@ class SelectionWidget(QtWidgets.QWidget):
             score += 1
         if std_dev is not None and std_dev != 0.00 and std_dev <= 0.5:
             score += 1
-        if score == 1:
-            prep_label.setStyleSheet(prep_label.styleSheet() + "color: orange;")
-        elif score == 2:
-            prep_label.setStyleSheet(prep_label.styleSheet() + "color: red;")
-        elif score == 3:
-            prep_label.setStyleSheet(prep_label.styleSheet() + "color: #d503ff;")
+        prep_accent = accent_from_score(score)
         tooltip = ""
         if win_percentage is not None:
             tooltip += f"Win Percentage\n{win_percentage * 100:.0f}%"
@@ -797,114 +1142,140 @@ class SelectionWidget(QtWidgets.QWidget):
             tooltip += f"\nAverage Difference\n{average_difference:.2f}"
         if std_dev is not None:
             tooltip += f"\nStandard Deviation\n{std_dev:.2f}"
-        prep_label.setToolTip(tooltip)
-        layout.addWidget(prep_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
         if selection.days_since_last is None or selection.days_since_last == 0:
-            days_since_label = SmallInfoLabel("Unraced")
+            days_since_text = "Unraced"
         else:
-            days_since_label = SmallInfoLabel(f"{selection.days_since_last} days")
-        days_since_label.setFixedWidth(screen_width_percentage(0.047))
-        layout.addWidget(
-            days_since_label, alignment=QtCore.Qt.AlignmentFlag.AlignCenter
-        )
+            days_since_text = f"{selection.days_since_last} days"
 
-        comment_icon = QtGui.QIcon("icons/comment.png")
-        comment_icon_label = QtWidgets.QLabel()
-        comment_icon_label.setStyleSheet("background-color: transparent;")
-        comment_icon_label.setPixmap(
-            comment_icon.pixmap(
-                screen_height_percentage(0.02), screen_width_percentage(0.02)
+        win_odds, place_odds = selection_odds(selection)
+        odds_text = f"{format_price(win_odds)} / {format_price(place_odds)}"
+
+        chip_container = QtWidgets.QWidget()
+        chip_container.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        chip_layout = FlowLayout()
+        chip_container.setLayout(chip_layout)
+        chip_layout.addWidget(
+            DetailChip(
+                "Record",
+                f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}",
             )
         )
+        chip_layout.addWidget(DetailChip("Weight", weight_string))
+        chip_layout.addWidget(DetailChip("Barrier", str(selection.barrier)))
+        chip_layout.addWidget(DetailChip("Speed", speed_position or "-"))
+        chip_layout.addWidget(DetailChip("Odds", odds_text))
+        chip_layout.addWidget(
+            DetailChip(
+                "ROI",
+                f"{selection.roi:.0f}%",
+                accent="orange" if selection.roi > 0 else "",
+            )
+        )
+        chip_layout.addWidget(
+            DetailChip(
+                "Prep",
+                f"{ordinal(selection.runs_since_spell + 1)} up",
+                tooltip,
+                prep_accent,
+            )
+        )
+        chip_layout.addWidget(DetailChip("Freshness", days_since_text))
+        chip_layout.addWidget(
+            DetailChip(
+                "T/J Win",
+                f"{selection.trainer_jockey_win_percentage:.0f}%",
+                accent="red" if selection.trainer_jockey_win_percentage >= 20 else "",
+            )
+        )
+        chip_layout.addWidget(
+            DetailChip(
+                "Edge",
+                f"{selection.punters_edge:.2f}",
+                accent="orange" if selection.punters_edge > 0 else "",
+            )
+        )
+
         tooltip = ""
         if selection.comments is not None:
             tooltip += f"General Comments\n{selection.comments}"
         for brand, comment in selection.external_comments.items():
             tooltip += f"\n\n{brand.capitalize()}\n{comment}"
-        comment_icon_label.setToolTip(tooltip)
-        comment_icon_label.setFixedWidth(screen_width_percentage(0.02))
-        layout.addWidget(comment_icon_label)
-
-        gear_icon = QtGui.QIcon("icons/horse_halter.png")
-        gear_icon_label = QtWidgets.QLabel()
-        gear_icon_label.setStyleSheet("background-color: transparent;")
-        gear_icon_label.setPixmap(
-            gear_icon.pixmap(
-                screen_height_percentage(0.022), screen_width_percentage(0.022)
-            )
-        )
+        if tooltip:
+            chip_layout.addWidget(DetailChip("Comments", "Available", tooltip))
         if selection.gear_changes is None or selection.gear_changes == "":
-            gear_icon_label.setToolTip("No Gear Changes")
+            gear_tooltip = "No Gear Changes"
+            gear_text = "None"
         else:
-            gear_icon_label.setToolTip(selection.gear_changes)
-        gear_icon_label.setFixedWidth(screen_width_percentage(0.022))
-        layout.addWidget(gear_icon_label)
+            gear_tooltip = selection.gear_changes
+            gear_text = "Updated"
+        chip_layout.addWidget(DetailChip("Gear", gear_text, gear_tooltip))
 
-        layout.addStretch()
-        self.installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        if (
-            event.type() == QtCore.QEvent.Type.MouseButtonPress
-            and event.button() == QtCore.Qt.MouseButton.LeftButton
-        ):
-            self.clicked.emit()
-            return True
-        elif (
-            event.type() == QtCore.QEvent.Type.MouseButtonPress
-            and event.button() == QtCore.Qt.MouseButton.RightButton
-        ):
-            # copy selection name and number to clipboard
-            clipboard = QtWidgets.QApplication.clipboard()
-            clipboard.setText(
-                f"Rx {self.selection.number}. {self.selection.name}: Medium"
-            )
-        return False
+        layout.addWidget(chip_container)
 
 
 class SelectionsWidget(QtWidgets.QWidget):
     def __init__(self, selections: list[Selection], venue: str):
         super(SelectionsWidget, self).__init__()
+        self.venue = venue
+        self._section_state: dict[int, tuple[Selection, QtWidgets.QTreeWidgetItem]] = {}
         self.setContentsMargins(0, 0, 0, 0)
-        self.setFixedHeight(screen_height_percentage(0.67))
+        self.setMinimumHeight(max(320, screen_height_percentage(0.35)))
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setContentsMargins(0, 0, 0, 0)
+        self.tree.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.tree.setVerticalScrollMode(
+            QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel
+        )
         layout = QtWidgets.QVBoxLayout()
-        layout.stretch(0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.tree)
         self.setLayout(layout)
         self.tree.setIndentation(0)
 
-        self.sections: list[tuple[Selection, QtWidgets.QWidget]] = []
-        self.define_sections(selections)
-        self.add_sections(venue)
+        self.define_sections(selections, venue)
 
-    def add_sections(self, venue: str):
-        for selection, widget in self.sections:
-            button1 = self.add_button(selection, venue)
-            section1 = self.add_widget(button1, widget)
-            button1.addChild(section1)
-
-    def define_sections(self, selections: list[Selection]):
+    def define_sections(self, selections: list[Selection], venue: str):
         for selection in selections:
-            widget = QtWidgets.QWidget(self.tree)
-            layout = QtWidgets.QVBoxLayout(widget)
-            widget.setLayout(layout)
-            if selection.total_runs != 0:
-                layout.addWidget(RunsTitleWidget())
+            button = self.add_button(selection, venue)
+            section = self.add_widget(button)
+            button.addChild(section)
+            self._section_state[id(button)] = (selection, section)
 
-            to_date = datetime.now()
-            for run in selection.runs[:10]:
-                from_date = datetime.strptime(run.meeting_date, "%Y-%m-%d")
-                if (to_date - from_date).days > (SPELL_THRESHOLD - 20):
-                    layout.addWidget(SpellWidget((to_date - from_date).days))
-                to_date = from_date
-                run_widget = RunsWidget(run, selection.weight - selection.claim)
-                layout.addWidget(run_widget)
-            self.sections.append((selection, widget))
+    def build_section_widget(self, selection: Selection) -> QtWidgets.QWidget:
+        widget = QtWidgets.QWidget(self.tree)
+        widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        layout = QtWidgets.QVBoxLayout(widget)
+        widget.setLayout(layout)
+        layout.setContentsMargins(4, 6, 4, 6)
+        layout.setSpacing(8)
+        layout.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignTop))
+
+        if selection.runs:
+            layout.addWidget(RunsTitleWidget())
+
+        to_date = datetime.now()
+        for run in selection.runs[:10]:
+            from_date = datetime.strptime(run.meeting_date, "%Y-%m-%d")
+            if (to_date - from_date).days > (SPELL_THRESHOLD - 20):
+                layout.addWidget(SpellWidget((to_date - from_date).days))
+            to_date = from_date
+            layout.addWidget(RunsWidget(run, selection.weight - selection.claim))
+        return widget
 
     def add_button(self, selection: Selection, venue: str):
         item = QtWidgets.QTreeWidgetItem()
@@ -915,52 +1286,81 @@ class SelectionsWidget(QtWidgets.QWidget):
             item.setBackground(0, QtGui.QColor(74, 94, 112))
         self.tree.addTopLevelItem(item)
         expand_button = SelectionWidget(selection, venue)
-        expand_button.clicked.connect(lambda: self.on_clicked(item))
+        expand_button.clicked.connect(lambda item=item: self.on_clicked(item))
         self.tree.setItemWidget(item, 0, expand_button)
+        item.setSizeHint(0, expand_button.sizeHint())
         return item
 
     def on_clicked(self, item):
+        section_state = self._section_state.get(id(item))
+        if section_state is not None:
+            selection, section = section_state
+            if self.tree.itemWidget(section, 0) is None:
+                section_widget = self.build_section_widget(selection)
+                self.tree.setItemWidget(section, 0, section_widget)
+                section.setSizeHint(0, section_widget.sizeHint())
         if item.isExpanded():
             item.setExpanded(False)
         else:
             item.setExpanded(True)
 
-    def add_widget(self, button, widget):
+    def add_widget(self, button):
         section = QtWidgets.QTreeWidgetItem(button)
         section.setDisabled(True)
-        self.tree.setItemWidget(section, 0, widget)
         return section
 
 
 class EventInfoWidget(QtWidgets.QWidget):
     def __init__(self, event: Event):
         super(EventInfoWidget, self).__init__()
-        self.setMaximumHeight(24)
-
-        layout = QtWidgets.QHBoxLayout()
-        self.setLayout(layout)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(SmallInfoLabel(event.name))
-        layout.addWidget(QVLine())
-        self.time_remaining_label = SmallInfoLabel(
-            self.get_time_remaining(datetime.strptime(event.time, "%I:%M %p"))
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
         )
-        layout.addWidget(self.time_remaining_label)
-        layout.addWidget(QVLine())
-        layout.addWidget(SmallInfoLabel(f"{event.distance}m"))
-        layout.addWidget(QVLine())
-        layout.addWidget(SmallInfoLabel(f"${event.prize_money:,}"))
-        layout.addWidget(QVLine())
-        if event.pace is not None:
-            layout.addWidget(SmallInfoLabel(f"{round(event.pace, 2)} Pace Rating"))
-        else:
-            layout.addWidget(SmallInfoLabel("Uknown Pace Rating"))
-        layout.addWidget(QVLine())
-        layout.addWidget(SmallInfoLabel(f"{event.starters} Runners"))
-        layout.addWidget(QVLine())
-        layout.addWidget(SmallInfoLabel(f"{event._class} Class"))
-        layout.addWidget(QVLine())
-        layout.addStretch()
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 6)
+        layout.setSpacing(8)
+
+        header_layout = QtWidgets.QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(10)
+        title_label = SubtitleLabel(event.name)
+        title_label.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
+        title_label.setWordWrap(True)
+        header_layout.addWidget(title_label, 1)
+        header_layout.addWidget(SmallInfoLabel(event.time))
+        layout.addLayout(header_layout)
+
+        chips_widget = QtWidgets.QWidget()
+        chips_layout = FlowLayout()
+        chips_widget.setLayout(chips_layout)
+
+        pace_text = (
+            f"{round(event.pace, 2)} Pace Rating"
+            if event.pace is not None
+            else "Unknown"
+        )
+        self.time_remaining_chip = DetailChip(
+            "Countdown",
+            self.get_time_remaining(parse_event_time_label(event.time)),
+        )
+        chips_layout.addWidget(self.time_remaining_chip)
+        chips_layout.addWidget(DetailChip("Distance", f"{event.distance}m"))
+        chips_layout.addWidget(DetailChip("Prize", f"${event.prize_money:,}"))
+        chips_layout.addWidget(DetailChip("Pace", pace_text))
+        chips_layout.addWidget(DetailChip("Starters", f"{event.starters} Runners"))
+        full_class_text = f"{event._class} Class"
+        class_chip = DetailChip(
+            "Class",
+            shorten(full_class_text, width=32, placeholder="..."),
+            full_class_text,
+        )
+        class_chip.setMinimumWidth(max(170, screen_width_percentage(0.12)))
+        class_chip.value_label.setWordWrap(False)
+        chips_layout.addWidget(class_chip)
+        layout.addWidget(chips_widget)
+
         self.tick_timer = EventTickTimer(event)
         self.tick_timer.timeout.connect(self.update_time_remaining)
         self.tick_timer.start(1000)
@@ -989,7 +1389,7 @@ class EventInfoWidget(QtWidgets.QWidget):
         return time_remaining
 
     def update_time_remaining(self):
-        self.time_remaining_label.setText(
+        self.time_remaining_chip.set_value(
             self.get_time_remaining(self.tick_timer.event_time)
         )
         self.tick_timer.start(1000)
@@ -1002,82 +1402,118 @@ class EventWidget(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(EventInfoWidget(event), 0)
-        layout.addWidget(
-            SelectionsWidget(event.selections, venue),
-            1,
-            alignment=QtCore.Qt.AlignmentFlag.AlignTop,
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
         )
+        layout.addWidget(EventInfoWidget(event), 0)
+        layout.addWidget(SelectionsWidget(event.selections, venue), 1)
+
+
+class DeferredContentPlaceholder(QtWidgets.QLabel):
+    def __init__(self, text: str):
+        super(DeferredContentPlaceholder, self).__init__(text)
+        self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
+        self.setStyleSheet("color: #9fb0bd; background-color: transparent;")
 
 
 class EventsTabWidget(QtWidgets.QTabWidget):
     def __init__(self, meeting: Meeting):
         super(EventsTabWidget, self).__init__()
+        self.meeting = meeting
+        self._loaded_tabs: set[int] = set()
         self.tabBar().hide()
         self.setContentsMargins(0, 0, 0, 0)
         for event in meeting.events:
-            event_widget = EventWidget(event, meeting.name)
-            self.addTab(event_widget, event.name)
+            self.addTab(DeferredContentPlaceholder("Loading event..."), event.name)
+        self.currentChanged.connect(self.ensure_tab_loaded)
+        QtCore.QTimer.singleShot(0, lambda: self.ensure_tab_loaded(0))
+
+    def ensure_tab_loaded(self, index: int):
+        if index < 0 or index >= len(self.meeting.events):
+            return
+        if index in self._loaded_tabs:
+            return
+        placeholder = self.widget(index)
+        event_widget = EventWidget(self.meeting.events[index], self.meeting.name)
+        self.removeTab(index)
+        self.insertTab(index, event_widget, self.meeting.events[index].name)
+        if placeholder is not None:
+            placeholder.deleteLater()
+        self._loaded_tabs.add(index)
+        self.setCurrentIndex(index)
 
 
 class EventNumberWidget(QtWidgets.QWidget):
+    selected = QtCore.Signal(int)
+
     def __init__(self, event: Event):
         super(EventNumberWidget, self).__init__()
 
-        self.event_number = event.event_number
+        self.event_index = event.event_number - 1
         event_layout = QtWidgets.QVBoxLayout()
         self.setLayout(event_layout)
-        event_button = QtWidgets.QPushButton(f"{self.event_number}")
-        event_button.setFont(QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold))
-        event_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
-        # make button circular
-        event_button.setStyleSheet("border-radius: 5;")
-        event_button.setFixedWidth(screen_width_percentage(0.04))
-        event_button.setFixedHeight(screen_height_percentage(0.04))
-        event_button.clicked.connect(self.button_clicked)
+        event_layout.setContentsMargins(0, 0, 0, 0)
+        event_layout.setSpacing(4)
+        self.event_button = QtWidgets.QPushButton(f"{event.event_number}")
+        self.event_button.setFont(QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold))
+        self.event_button.setCursor(
+            QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        )
+        self.event_button.setStyleSheet("border-radius: 5;")
+        self.event_button.setMinimumWidth(max(48, screen_width_percentage(0.032)))
+        self.event_button.setMinimumHeight(max(38, screen_height_percentage(0.035)))
+        self.event_button.clicked.connect(self.button_clicked)
         event_label = LargeInfoLabel(f"{event.time}")
         event_layout.addWidget(
-            event_button, alignment=QtCore.Qt.AlignmentFlag.AlignCenter
+            self.event_button, alignment=QtCore.Qt.AlignmentFlag.AlignCenter
         )
         event_layout.addWidget(event_label)
         event_layout.addStretch()
 
     def button_clicked(self):
-        event_parent = self.parent()
-        if type(event_parent) is EventNumbersWidget:
-            event_parent.reset_background()
-        self.setStyleSheet("background-color: #303c46;")
-        events_parent = event_parent.parent()
-        if type(events_parent) is EventsInfoWidget:
-            events_parent.set_tab_index(self.event_number - 1)
+        self.selected.emit(self.event_index)
+
+    def set_active(self, active: bool):
+        if active:
+            self.setStyleSheet("background-color: #303c46;")
+            self.event_button.setStyleSheet(
+                "border-radius: 5; background-color: #435464;"
+            )
+            return
+        self.setStyleSheet("background-color: #54687a;")
+        self.event_button.setStyleSheet("border-radius: 5;")
 
 
 class EventNumbersWidget(QtWidgets.QWidget):
+    eventSelected = QtCore.Signal(int)
+
     def __init__(self, meeting: Meeting):
         super(EventNumbersWidget, self).__init__()
 
+        self._current_index = 0
+        self._event_widgets: list[EventNumberWidget] = []
         events_layout = QtWidgets.QHBoxLayout()
         self.setLayout(events_layout)
         events_layout.setContentsMargins(0, 0, 0, 0)
+        events_layout.setSpacing(8)
         for event in meeting.events:
             event_widget = EventNumberWidget(event)
-            if event.event_number == 1:
-                event_widget.setStyleSheet("background-color: #303c46;")
+            event_widget.selected.connect(self.set_current_index)
+            self._event_widgets.append(event_widget)
             events_layout.addWidget(event_widget)
         events_layout.addStretch()
+        if self._event_widgets:
+            self.set_current_index(0, emit_signal=False)
 
-    def reset_background(self):
-        layout = self.layout()
-        if layout is None:
+    def set_current_index(self, index: int, emit_signal: bool = True):
+        if not self._event_widgets:
             return
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget is None:
-                continue
-            widget.setStyleSheet("background-color: #54687a;")
+        self._current_index = max(0, min(index, len(self._event_widgets) - 1))
+        for widget_index, widget in enumerate(self._event_widgets):
+            widget.set_active(widget_index == self._current_index)
+        if emit_signal:
+            self.eventSelected.emit(self._current_index)
 
 
 class SelectionGraphWidget(QtWidgets.QWidget):
@@ -1266,105 +1702,161 @@ class EventModelWidget(QtWidgets.QWidget):
             )
 
 
+ANALYSIS_VIEWS = [
+    ("model", "Model Analysis", EventModelWidget),
+    ("speed", "Speed Analysis", EventSpeedWidget),
+    ("stats", "Stats Analysis", EventStatsWidget),
+]
+
+
 class EventAnalysisWidget(QtWidgets.QWidget):
-    def __init__(self, event: Event):
+    def __init__(self, event: Event, app_state: AppState):
         super(EventAnalysisWidget, self).__init__()
 
+        self.app_state = app_state
+        self.current_event = event
+        self._view_cache: dict[str, QtWidgets.QWidget] = {}
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.setFixedWidth(screen_width_percentage(0.12))
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-        combo_box = QtWidgets.QComboBox()
-        combo_box.addItem("Model Analysis")
-        combo_box.addItem("Speed Analysis")
-        combo_box.addItem("Stats Analysis")
-        layout.addWidget(combo_box)
-        combo_box.currentIndexChanged.connect(
-            lambda index: self.change_analysis(index, event)
+        self.setMinimumWidth(max(260, screen_width_percentage(0.12)))
+        self.setMaximumWidth(max(320, screen_width_percentage(0.18)))
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Expanding,
         )
-        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        layout.addWidget(EventModelWidget(event))
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignTop))
+        self.combo_box = QtWidgets.QComboBox()
+        for view_id, label, _ in ANALYSIS_VIEWS:
+            self.combo_box.addItem(label, userData=view_id)
+        self.combo_box.currentIndexChanged.connect(self.change_analysis)
+        layout.addWidget(self.combo_box)
+        self.stack = QtWidgets.QStackedWidget()
+        layout.addWidget(self.stack, 1)
+        self.placeholder = DeferredContentPlaceholder("Loading analysis...")
+        self.stack.addWidget(self.placeholder)
+        self.stack.setCurrentWidget(self.placeholder)
+        self.app_state.analysisViewChanged.connect(self.set_analysis_view)
+        self.set_analysis_view(self.app_state.analysis_view_id)
+        QtCore.QTimer.singleShot(0, lambda event=event: self.set_event(event))
 
-    def change_analysis(self, index: int, event: Event):
-        layout = self.layout()
-        if layout is None:
-            return
-        for i in reversed(range(layout.count())):
-            item = layout.itemAt(i)
-            if item is None:
-                continue
-
-            widget = item.widget()
+    def set_event(self, event: Event):
+        self.current_event = event
+        while self.stack.count() > 0:
+            widget = self.stack.widget(0)
             if widget is None:
-                continue
-            elif isinstance(widget, QtWidgets.QComboBox):
-                continue
-            elif isinstance(widget, QtWidgets.QWidget):
-                widget.setParent(None)
-            else:
-                continue
-        if index == 0:
-            layout.addWidget(EventModelWidget(event))
-        elif index == 1:
-            layout.addWidget(EventSpeedWidget(event))
-        elif index == 2:
-            layout.addWidget(EventStatsWidget(event))
+                break
+            self.stack.removeWidget(widget)
+            widget.deleteLater()
+        self.placeholder = DeferredContentPlaceholder("Loading analysis...")
+        self.stack.addWidget(self.placeholder)
+        self.stack.setCurrentWidget(self.placeholder)
+        self._view_cache.clear()
+        QtCore.QTimer.singleShot(0, lambda: self.show_analysis(self.current_view_id()))
+
+    def current_view_id(self) -> str:
+        view_id = self.combo_box.currentData()
+        if isinstance(view_id, str):
+            return view_id
+        return ANALYSIS_VIEWS[0][0]
+
+    def show_analysis(self, view_id: str):
+        if view_id not in self._view_cache:
+            for registered_view_id, _, factory in ANALYSIS_VIEWS:
+                if registered_view_id != view_id:
+                    continue
+                widget = factory(self.current_event)
+                self._view_cache[view_id] = widget
+                self.stack.addWidget(widget)
+                break
+        current_widget = self._view_cache.get(view_id)
+        if current_widget is not None:
+            self.stack.setCurrentWidget(current_widget)
+
+    def change_analysis(self, _index: int):
+        view_id = self.current_view_id()
+        self.show_analysis(view_id)
+        self.app_state.set_analysis_view(view_id)
+
+    def set_analysis_view(self, view_id: str):
+        index = self.combo_box.findData(view_id)
+        if index == -1:
+            return
+        if self.combo_box.currentIndex() != index:
+            self.combo_box.setCurrentIndex(index)
+            return
+        self.show_analysis(view_id)
 
 
 class EventsInfoWidget(QtWidgets.QWidget):
+    eventSelected = QtCore.Signal(int)
+
     def __init__(self, meeting: Meeting):
         super(EventsInfoWidget, self).__init__()
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
+        self.event_numbers_widget = EventNumbersWidget(meeting)
+        numbers_scroll_area = QtWidgets.QScrollArea()
+        numbers_scroll_area.setWidgetResizable(True)
+        numbers_scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        numbers_scroll_area.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        numbers_scroll_area.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        numbers_scroll_area.setWidget(self.event_numbers_widget)
         layout.addWidget(
-            EventNumbersWidget(meeting), alignment=QtCore.Qt.AlignmentFlag.AlignTop
+            numbers_scroll_area, alignment=QtCore.Qt.AlignmentFlag.AlignTop
         )
         self.event_tab_widget = EventsTabWidget(meeting)
-        layout.addWidget(self.event_tab_widget, 1, QtCore.Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.event_tab_widget, 1)
+        self.event_numbers_widget.eventSelected.connect(self.set_tab_index)
 
     def set_tab_index(self, index: int):
         self.event_tab_widget.setCurrentIndex(index)
-        parent = self.parent()
-        if type(parent) is EventsWidget:
-            parent.change_race(index)
+        self.eventSelected.emit(index)
 
 
 class EventsWidget(QtWidgets.QWidget):
-    def __init__(self, meeting: Meeting):
+    def __init__(self, meeting: Meeting, app_state: AppState):
         super(EventsWidget, self).__init__()
 
         self.meeting = meeting
-        layout = QtWidgets.QHBoxLayout()
+        self.app_state = app_state
+        layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(EventsInfoWidget(self.meeting))
-        layout.addWidget(
-            EventAnalysisWidget(self.meeting.events[0]),
-            alignment=QtCore.Qt.AlignmentFlag.AlignRight,
+        self.events_info_widget = EventsInfoWidget(self.meeting)
+        self.analysis_widget = EventAnalysisWidget(
+            self.meeting.events[0], self.app_state
         )
+        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.events_info_widget)
+        self.splitter.addWidget(self.analysis_widget)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setStretchFactor(0, 4)
+        self.splitter.setStretchFactor(1, 1)
+        layout.addWidget(self.splitter)
+        self.events_info_widget.eventSelected.connect(self.change_race)
+        self.update_splitter_orientation()
 
     def change_race(self, event_number: int):
-        layout = self.layout()
-        if layout is None:
+        if event_number < 0 or event_number >= len(self.meeting.events):
             return
-        item = layout.itemAt(layout.count() - 1)
-        if item is None:
+        self.analysis_widget.set_event(self.meeting.events[event_number])
+
+    def resizeEvent(self, event: QtGui.QResizeEvent):
+        super().resizeEvent(event)
+        self.update_splitter_orientation()
+
+    def update_splitter_orientation(self):
+        if self.width() < 1300:
+            self.splitter.setOrientation(QtCore.Qt.Orientation.Vertical)
             return
-        widget = item.widget()
-        if widget is None:
-            return
-        elif isinstance(widget, QtWidgets.QWidget):
-            widget.setParent(None)
-        else:
-            return
-        if type(layout) is QtWidgets.QHBoxLayout:
-            layout.addWidget(
-                EventAnalysisWidget(self.meeting.events[event_number]),
-                alignment=QtCore.Qt.AlignmentFlag.AlignRight,
-            )
+        self.splitter.setOrientation(QtCore.Qt.Orientation.Horizontal)
 
 
 class MeetingInfoWidget(QtWidgets.QWidget):
@@ -1373,7 +1865,12 @@ class MeetingInfoWidget(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.setFixedWidth(screen_width_percentage(0.1))
+        self.setMinimumWidth(max(220, screen_width_percentage(0.1)))
+        self.setMaximumWidth(max(260, screen_width_percentage(0.18)))
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
 
         layout.addWidget(SubtitleLabel("Track"))
         layout.addWidget(QHLine())
@@ -1409,33 +1906,53 @@ class MeetingInfoWidget(QtWidgets.QWidget):
 
 
 class MeetingsTab(QtWidgets.QWidget):
-    def __init__(self, meeting: Meeting):
+    def __init__(self, meeting: Meeting, app_state: AppState):
         super(MeetingsTab, self).__init__()
-        layout = QtWidgets.QHBoxLayout()
+        layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        layout.setContentsMargins(0, 0, 5, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         meeting_info_widget = MeetingInfoWidget(meeting)
-        events_widget = EventsWidget(meeting)
-        layout.addWidget(meeting_info_widget)
-        layout.addWidget(events_widget)
+        events_widget = EventsWidget(meeting, app_state)
+        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(meeting_info_widget)
+        self.splitter.addWidget(events_widget)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 5)
+        layout.addWidget(self.splitter)
+        self.update_splitter_orientation()
+
+    def resizeEvent(self, event: QtGui.QResizeEvent):
+        super().resizeEvent(event)
+        self.update_splitter_orientation()
+
+    def update_splitter_orientation(self):
+        if self.width() < 1180:
+            self.splitter.setOrientation(QtCore.Qt.Orientation.Vertical)
+            return
+        self.splitter.setOrientation(QtCore.Qt.Orientation.Horizontal)
 
 
 class ScraperTab(QtWidgets.QScrollArea):
-    def __init__(self, scraper: MeetingsScraper):
+    def __init__(self, scraper: MeetingsScraper, app_state: AppState):
         super(ScraperTab, self).__init__()
 
         self.scraper = scraper
-        self.meetings: list[Meeting] = []
+        self.app_state = app_state
+        self.worker_thread: Optional[QtCore.QThread] = None
+        self.worker: Optional[MeetingsLoadWorker] = None
         main_widget = QtWidgets.QWidget()
         self.setStyleSheet("QScrollArea {border: 0px;}")
         self.setLayout(QtWidgets.QFormLayout())
-        horizontal_layout = QtWidgets.QHBoxLayout()
-        main_widget.setLayout(horizontal_layout)
+        main_layout = QtWidgets.QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_widget.setLayout(main_layout)
         self.setWidget(main_widget)
         self.setWidgetResizable(True)
 
         date_widget = QtWidgets.QWidget()
-        date_widget.setFixedWidth(screen_width_percentage(0.12))
+        date_widget.setMinimumWidth(max(220, screen_width_percentage(0.12)))
+        date_widget.setMaximumWidth(max(300, screen_width_percentage(0.2)))
         date_form = QtWidgets.QFormLayout()
         date_widget.setLayout(date_form)
         label = LargeInfoLabel("Date to Scrape")
@@ -1443,7 +1960,7 @@ class ScraperTab(QtWidgets.QScrollArea):
         font.setUnderline(True)
         label.setFont(font)
 
-        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        label.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
         date_form.addRow(label)
         self.date_selector = QtWidgets.QDateEdit()
         self.date_selector.setDisplayFormat("dd/MM/yyyy")
@@ -1457,6 +1974,9 @@ class ScraperTab(QtWidgets.QScrollArea):
         self.local_checkbox = QtWidgets.QCheckBox("Use local data")
         self.local_checkbox.setChecked(True)
         date_form.addWidget(self.local_checkbox)
+        self.status_label = SmallInfoLabel("Choose a date and extract meetings.")
+        self.status_label.setWordWrap(True)
+        date_form.addWidget(self.status_label)
 
         meetings_widget = QtWidgets.QScrollArea()
         meetings_widget.setWidgetResizable(True)
@@ -1465,49 +1985,99 @@ class ScraperTab(QtWidgets.QScrollArea):
         meetings_widget.setStyleSheet("QGroupBox {border: 0px;}")
         self.meetings_form = QtWidgets.QFormLayout()
         meetings_group.setLayout(self.meetings_form)
-        horizontal_layout.addWidget(date_widget, 1)
-        horizontal_layout.addWidget(meetings_widget, 1)
-        # add horizontal space for the rest of the window
-        horizontal_layout.addStretch()
+        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(date_widget)
+        self.splitter.addWidget(meetings_widget)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 4)
+        main_layout.addWidget(self.splitter)
+        self.update_splitter_orientation()
+
+    def resizeEvent(self, event: QtGui.QResizeEvent):
+        super().resizeEvent(event)
+        self.update_splitter_orientation()
+
+    def update_splitter_orientation(self):
+        if self.width() < 980:
+            self.splitter.setOrientation(QtCore.Qt.Orientation.Vertical)
+            return
+        self.splitter.setOrientation(QtCore.Qt.Orientation.Horizontal)
 
     def scrape_date(self, date: QtCore.QDate):
-        # clear the previous tabs
-        tab_widget = self.parent().parent()
+        if self.worker_thread is not None and self.worker_thread.isRunning():
+            return
+
+        parent = self.parent()
+        tab_widget = parent.parent() if parent is not None else None
         if type(tab_widget) is QtWidgets.QTabWidget:
             for i in reversed(range(tab_widget.count())):
                 if tab_widget.tabText(i) != "Home":
                     tab_widget.removeTab(i)
 
-        # clear the previous meetings
         for i in reversed(range(self.meetings_form.count())):
-            widget = self.meetings_form.itemAt(i).widget()
+            item = self.meetings_form.itemAt(i)
+            if item is None:
+                continue
+            widget = item.widget()
             if isinstance(widget, QtWidgets.QWidget):
                 widget.setParent(None)
         self.scrape_button.setEnabled(False)
         self.scrape_button.setText("Extracting...")
+        self.status_label.setText("Loading meetings...")
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
         self.update()
+        self.app_state.set_error("")
+        self.app_state.set_loading(True)
 
-        if self.local_checkbox.isChecked():
-            with open("meetings.txt", "r") as file:
-                self.meetings = []
-                for line in file.readlines():
-                    self.meetings.append(eval(line))
-        else:
-            scrape_date = datetime(date.year(), date.month(), date.day())
-            self.meetings = self.scraper.get_meetings(scrape_date)
-            with open("meetings.txt", "w") as file:
-                for meeting in self.meetings:
-                    file.write(str(meeting) + "\n")
+        scrape_date = datetime(date.year(), date.month(), date.day())
+        self.worker_thread = QtCore.QThread(self)
+        self.worker = MeetingsLoadWorker(
+            scraper=self.scraper,
+            scrape_date=scrape_date,
+            use_local_data=self.local_checkbox.isChecked(),
+        )
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_meetings_loaded)
+        self.worker.failed.connect(self.on_meetings_failed)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.failed.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.failed.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.finished.connect(self.on_worker_finished)
+        self.worker_thread.start()
 
-        state_dict = group_by_state(self.meetings)
-        for state, meetings in state_dict.items():
-            state_frame = self.create_state_frame(state, meetings)
+    def on_meetings_loaded(self, meetings: list[Meeting]):
+        self.app_state.set_meetings(meetings)
+        state_dict = group_by_state(meetings)
+        for state, state_meetings in state_dict.items():
+            state_frame = self.create_state_frame(state, state_meetings)
             self.meetings_form.addWidget(state_frame)
+        if meetings:
+            self.status_label.setText(
+                f"Loaded {len(meetings)} meeting{'s' if len(meetings) != 1 else ''}."
+            )
+        else:
+            self.status_label.setText("No meetings found for the selected date.")
+        self.finish_scrape()
 
+    def on_meetings_failed(self, message: str):
+        self.app_state.set_error(message)
+        self.status_label.setText(f"Failed to load meetings: {message}")
+        QtWidgets.QMessageBox.critical(self, "Load Failed", message)
+        self.finish_scrape()
+
+    def finish_scrape(self):
+        self.app_state.set_loading(False)
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.ArrowCursor))
         self.scrape_button.setText("Extract")
         self.scrape_button.setEnabled(True)
+
+    def on_worker_finished(self):
+        self.worker_thread = None
+        self.worker = None
 
     def create_state_frame(
         self, state: str, meetings: list[Meeting]
@@ -1516,19 +2086,19 @@ class ScraperTab(QtWidgets.QScrollArea):
         layout = QtWidgets.QVBoxLayout()
         frame.setLayout(layout)
         title_label = TitleLabel(state)
-        title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        title_label.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
         layout.addWidget(title_label)
         layout.addWidget(QHLine())
         state_widget = QtWidgets.QWidget()
         horizontal_layout = QtWidgets.QHBoxLayout()
         state_widget.setLayout(horizontal_layout)
         for meeting in meetings:
-            meeting_name = meeting.name
-            button = QtWidgets.QPushButton(meeting_name)
-            button.setFixedWidth(screen_width_percentage(0.095))
+            button = QtWidgets.QPushButton(meeting.name)
+            button.setProperty("meeting_key", meeting_key(meeting))
+            button.setMinimumWidth(max(140, screen_width_percentage(0.08)))
             button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
             button.clicked.connect(self.open_meeting_window)
-            button.setFixedHeight(screen_height_percentage(0.04))
+            button.setMinimumHeight(max(36, screen_height_percentage(0.035)))
             horizontal_layout.addWidget(button)
 
         horizontal_layout.addStretch()
@@ -1542,70 +2112,71 @@ class ScraperTab(QtWidgets.QScrollArea):
             return
         sender.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
         self.update()
-        meeting_name = sender.text()
-        meeting = next(
-            (meeting for meeting in self.meetings if meeting.name == meeting_name)
-        )
-        tab_widget = self.parent().parent()
-        if type(tab_widget) is QtWidgets.QTabWidget:
-            # check if the tab widget already exists
-            tab_index = -1
-            for i in range(tab_widget.count()):
-                if tab_widget.tabText(i) == meeting.name:
-                    tab_index = i
-                    break
-            if tab_index == -1:
-                tab_index = tab_widget.addTab(MeetingsTab(meeting), meeting.name)
-            tab_widget.setCurrentIndex(tab_index)
-            self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.ArrowCursor))
-            sender.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
-            return
-
-        print("Error: Tab widget not found")
-        self.close()
+        meeting_id = sender.property("meeting_key")
+        if isinstance(meeting_id, str):
+            self.app_state.set_selected_meeting(meeting_id)
+        self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.ArrowCursor))
+        sender.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, scraper: MeetingsScraper):
+    def __init__(self, scraper: MeetingsScraper, app_state: AppState):
         super(MainWindow, self).__init__()
 
-        widget = QtWidgets.QTabWidget()
-        self.setCentralWidget(widget)
-        window_layout = QtWidgets.QFormLayout()
-        widget.setLayout(window_layout)
-        widget.setContentsMargins(10, 10, 0, 0)
+        self.app_state = app_state
+        self.tab_widget = QtWidgets.QTabWidget()
+        self.setCentralWidget(self.tab_widget)
+        self.tab_widget.setContentsMargins(10, 10, 10, 10)
+        self.tab_widget.addTab(ScraperTab(scraper, app_state), "Home")
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        self.tab_widget.setStyleSheet("QTabWidget::pane {border: 0;}")
+        self.app_state.selectedMeetingChanged.connect(self.open_meeting_tab)
 
-        widget.setMaximumSize(SCREEN_SIZE)
+    def close_tab(self, index: int):
+        if index == 0:
+            return
+        self.tab_widget.removeTab(index)
 
-        widget.addTab(ScraperTab(scraper), "Home")
-        widget.setTabsClosable(True)
-        widget.tabCloseRequested.connect(lambda index: widget.removeTab(index))
-        # remove border inside tabs
-        widget.setStyleSheet("QTabWidget::pane {border: 0;}")
+    def open_meeting_tab(self, meeting: Meeting):
+        key = meeting_key(meeting)
+        for index in range(self.tab_widget.count()):
+            if self.tab_widget.tabBar().tabData(index) == key:
+                self.tab_widget.setCurrentIndex(index)
+                return
+        index = self.tab_widget.addTab(
+            MeetingsTab(meeting, self.app_state), meeting.name
+        )
+        self.tab_widget.tabBar().setTabData(index, key)
+        self.tab_widget.setCurrentIndex(index)
 
 
 class MeetingScraperApp(QtWidgets.QApplication):
     def __init__(self):
         super(MeetingScraperApp, self).__init__(sys.argv)
 
+        self.app_state = AppState()
         self.setStyleSheet(qdarkstyle.load_stylesheet_pyside6())
         self.setApplicationName("Meeting Scraper")
         self.setApplicationDisplayName("Meeting Scraper")
 
-        app_font = QtGui.QFont()
-        app_font.setFamily("Helvetica")
-        app_font.setPointSize(14)
-
+        app_font = QtGui.QFontDatabase.systemFont(
+            QtGui.QFontDatabase.SystemFont.GeneralFont
+        )
+        app_font.setPointSize(max(app_font.pointSize(), 12))
+        global FONT
+        FONT = app_font.family()
         self.setFont(app_font)
 
     def run(self, scraper: MeetingsScraper) -> int:
         global SCREEN_SIZE
-        SCREEN_SIZE = QtWidgets.QApplication.primaryScreen().size()
-        if SCREEN_SIZE.width() > 1920:
-            SCREEN_SIZE.setWidth(1920)
-        if SCREEN_SIZE.height() > 1080:
-            SCREEN_SIZE.setHeight(1080)
-        window = MainWindow(scraper)
+        screen = QtWidgets.QApplication.primaryScreen()
+        if screen is None:
+            SCREEN_SIZE = QtCore.QSize(1600, 900)
+        else:
+            SCREEN_SIZE = screen.availableGeometry().size()
+        window = MainWindow(scraper, self.app_state)
+        window.setMinimumSize(1100, 720)
         window.showMaximized()
 
         return self.exec_()
