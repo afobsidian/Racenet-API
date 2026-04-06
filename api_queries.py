@@ -21,6 +21,7 @@ class QueryType(Enum):
     EVENT = 6
     ODDS = 7
     SECTIONAL = 8
+    PREDICTOR_SETTINGS = 9
 
 
 class Variables:
@@ -130,6 +131,15 @@ class OddsQueryVariables(Variables):
     _type: QueryType = QueryType.ODDS
 
 
+@dataclass
+class PredictorSettingsQueryVariables(Variables):
+    brand: str = "punters"
+    _type: QueryType = QueryType.PREDICTOR_SETTINGS
+
+    def get_dict(self):
+        return {}
+
+
 OPERATION_NAMES = {
     QueryType.MEETINGS_DATE: "meetingsByStartEndDate",
     QueryType.MEETINGS_DATE_COUNTRY: "meetingsByStartEndDateAndCountryName",
@@ -139,6 +149,7 @@ OPERATION_NAMES = {
     QueryType.STATS: "statsByEventId",
     QueryType.EVENT: "eventById",
     QueryType.SECTIONAL: "getSectionalsBySelectionIds",
+    QueryType.PREDICTOR_SETTINGS: "predictorSettingsDefaults",
 }
 
 QUERY_HASHES_FILE = Path(__file__).with_name("query_hashes.json")
@@ -151,7 +162,8 @@ DEFAULT_QUERY_HASHES = {
     QueryType.FULL_FORM: "ed7986a7b3dfaafe2e3801a9b04e7941c2e5291ef97d2cb6d2de2a1b9c6662f1",
     QueryType.STATS: "5e6e59dd2725d40f214cc3d4680b9934660f9fd1b89c2d8111b22d30f8c03dc6",
     QueryType.EVENT: "8fff49d83321193fce3b3a0c39bdcff4c74dc0725feede61b6b726c84d76845d",
-    QueryType.SECTIONAL: "d5053915e37d607da7348445800272b012f29de6c8aa34cefa9d1f004a8cb3fd",
+    QueryType.SECTIONAL: "05aba715ad18f10f5b526c18f109cd37dbbc7f20655d6b6822941e9b9086ae00",
+    QueryType.PREDICTOR_SETTINGS: "b3c0e6a5157e60028513deb46b643cfcc464fda6cc10bc58ebcce6c21d4f4c0c",
 }
 
 

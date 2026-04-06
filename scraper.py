@@ -9,16 +9,46 @@ from api_queries import (
     MeetingSlugQueryVariables,
     MeetingsTimeQueryVariables,
     OddsQueryVariables,
+    PredictorSettingsQueryVariables,
     QueryInfo,
     QueryRequest,
     QueryType,
     SectionalQueryVariables,
     StatsQueryVariables,
 )
-from meetings_data import Event, Meeting
+from meetings_data import Event, Meeting, PredictorSettingsPreset
 
 
 class MeetingsScraper:
+    def __init__(self):
+        self.predictor_settings: Optional[PredictorSettingsPreset] = None
+
+    @staticmethod
+    def default_predictor_settings() -> PredictorSettingsPreset:
+        return PredictorSettingsPreset.from_dict(
+            {
+                "name": "Balanced",
+                "weight": 15,
+                "barrier": 20,
+                "careerWinRate": 50,
+                "careerPlaceRate": 30,
+                "careerPrizeMoney": 40,
+                "averagePrizeMoney": 25,
+                "jockeyWins": 20,
+                "jockeyHorseWins": 5,
+                "trainerWins": 30,
+                "trackPlacings": 30,
+                "distPlacings": 30,
+                "trackDistPlacings": 25,
+                "firmPlacings": 15,
+                "goodPlacings": 15,
+                "softPlacings": 15,
+                "heavyPlacings": 10,
+                "synthPlacings": 10,
+                "lateSpeed": 25,
+            }
+        )
+
     def create_meetings_time_query(self, scrape_date: datetime) -> QueryRequest:
         scrape_date -= timedelta(days=1)
         start_of_day = scrape_date.replace(hour=13, minute=0, second=0, microsecond=0)
@@ -83,6 +113,59 @@ class MeetingsScraper:
         )
         return QueryRequest(query_info=sectional_query)
 
+    def create_predictor_settings_query(self) -> QueryRequest:
+        predictor_settings_query = QueryInfo(
+            query_type=QueryType.PREDICTOR_SETTINGS,
+            variables=PredictorSettingsQueryVariables(),
+        )
+        return QueryRequest(query_info=predictor_settings_query)
+
+    def parse_predictor_settings_response(
+        self, response: dict
+    ) -> Optional[PredictorSettingsPreset]:
+        response_data = response.get("data")
+        if response_data is None:
+            return None
+        presets = response_data.get("predictorSettingsDefaults")
+        if presets is None:
+            presets = response_data.get("predictorSettingsPresets")
+
+        if isinstance(presets, dict):
+            return PredictorSettingsPreset.from_dict(presets)
+
+        if not isinstance(presets, list) or len(presets) == 0:
+            return None
+        for preset in presets:
+            if preset.get("name") == "Balanced":
+                return PredictorSettingsPreset.from_dict(preset)
+        return PredictorSettingsPreset.from_dict(presets[0])
+
+    def get_predictor_settings(self) -> Optional[PredictorSettingsPreset]:
+        if self.predictor_settings is not None:
+            return self.predictor_settings
+        predictor_settings_query = self.create_predictor_settings_query()
+        predictor_settings_response = predictor_settings_query.send_request()
+        self.predictor_settings = self.parse_predictor_settings_response(
+            predictor_settings_response
+        )
+        if self.predictor_settings is None:
+            self.predictor_settings = self.default_predictor_settings()
+        return self.predictor_settings
+
+    def apply_predictor_settings_to_meetings(self, meetings: list[Meeting]):
+        predictor_settings = self.get_predictor_settings()
+        if predictor_settings is None:
+            return
+
+        for meeting in meetings:
+            for event in meeting.events:
+                for selection in event.selections:
+                    selection.apply_predictor_settings(
+                        predictor_settings,
+                        event.track_condition,
+                        event.track_type,
+                    )
+
     def parse_meetings_response_time(self, response: dict) -> list[str]:
         meetings_data = response.get("data")
         if meetings_data is None:
@@ -132,6 +215,7 @@ class MeetingsScraper:
             return None
         meeting = Meeting.from_dict(meeting_data)
         meeting.events.sort(key=lambda x: x.event_number)
+        predictor_settings = self.get_predictor_settings()
         delete_events = []
         for index, event in enumerate(meeting.events):
             event_query = self.create_event_query(str(event.event_id))
@@ -143,6 +227,13 @@ class MeetingsScraper:
             if event_data is None:
                 continue
             meeting.events[index] = Event.from_dict(event_data)
+            if predictor_settings is not None:
+                for selection in meeting.events[index].selections:
+                    selection.apply_predictor_settings(
+                        predictor_settings,
+                        meeting.events[index].track_condition,
+                        meeting.events[index].track_type,
+                    )
             # if multiple selections numbers are none, continue
             if all(
                 selection.number is None
@@ -224,6 +315,7 @@ class MeetingsScraper:
     def get_meetings(
         self, scrape_date: datetime = datetime.now(), time_query: bool = False
     ) -> list[Meeting]:
+        self.get_predictor_settings()
         if time_query:
             meetings_request = self.create_meetings_time_query(scrape_date)
             meetings_response = meetings_request.send_request()

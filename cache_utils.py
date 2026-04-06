@@ -6,6 +6,7 @@ from pathlib import Path
 from types import NoneType, UnionType
 from typing import Any, Literal, Union, get_args, get_origin
 
+import meetings_data
 from meetings_data import Meeting
 
 
@@ -55,12 +56,13 @@ def restore_cached_value(value: Any, annotation: Any) -> Any:
 def load_meetings_cache(cache_path: str) -> list[Meeting]:
     path = Path(cache_path)
     if not path.exists():
-        raise FileNotFoundError(
-            f"Cache file not found: {cache_path}. Disable local data to fetch fresh meetings."
-        )
+        return load_legacy_meetings_cache(path.with_name("meetings.txt"))
 
-    with path.open("r", encoding="utf-8") as file:
-        payload = json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return load_legacy_meetings_cache(path.with_name("meetings.txt"))
 
     if not isinstance(payload, list):
         raise ValueError(f"Cache file is invalid: {cache_path}")
@@ -73,6 +75,27 @@ def load_meetings_cache(cache_path: str) -> list[Meeting]:
             meetings.append(restore_cached_value(item, Meeting))
         else:
             meetings.append(Meeting.from_dict(item))
+    return meetings
+
+
+def load_legacy_meetings_cache(legacy_path: Path) -> list[Meeting]:
+    if not legacy_path.exists():
+        raise FileNotFoundError(
+            f"Cache file not found: {legacy_path}. Disable local data to fetch fresh meetings."
+        )
+
+    eval_globals = dict(vars(meetings_data))
+    eval_globals["__builtins__"] = {}
+
+    meetings: list[Meeting] = []
+    with legacy_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            text = line.strip()
+            if not text:
+                continue
+            meeting = eval(text, eval_globals, {})
+            if isinstance(meeting, Meeting):
+                meetings.append(meeting)
     return meetings
 
 

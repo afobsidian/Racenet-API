@@ -37,7 +37,9 @@ class MeetingsLoadWorker(QtCore.QObject):
 
     def _load_meetings(self) -> list[Meeting]:
         if self.use_local_data:
-            return load_meetings_cache(self.cache_path)
+            meetings = load_meetings_cache(self.cache_path)
+            self.scraper.apply_predictor_settings_to_meetings(meetings)
+            return meetings
 
         meetings = self.scraper.get_meetings(self.scrape_date)
         save_meetings_cache(self.cache_path, meetings)

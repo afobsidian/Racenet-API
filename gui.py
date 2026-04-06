@@ -53,22 +53,28 @@ def qt_alignment(*flags: QtCore.Qt.AlignmentFlag) -> QtCore.Qt.AlignmentFlag:
 
 
 def parse_event_time_label(value: str) -> datetime:
+    if not isinstance(value, str):
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
     text = value.strip()
     if not text:
         return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    time_part, meridiem = text.rsplit(" ", 1)
-    hour_text, minute_text = time_part.split(":", 1)
-    hour = int(hour_text)
-    minute = int(minute_text)
-    meridiem = meridiem.upper()
+    try:
+        time_part, meridiem = text.rsplit(" ", 1)
+        hour_text, minute_text = time_part.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+        meridiem = meridiem.upper()
 
-    if meridiem == "AM":
-        hour = 0 if hour == 12 else hour
-    elif meridiem == "PM":
-        hour = 12 if hour == 12 else hour + 12
-    else:
-        raise ValueError(f"Unsupported time label: {value}")
+        if meridiem == "AM":
+            hour = 0 if hour == 12 else hour
+        elif meridiem == "PM":
+            hour = 12 if hour == 12 else hour + 12
+        else:
+            raise ValueError
+    except (TypeError, ValueError):
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     return datetime.now().replace(
         hour=hour,
@@ -1184,18 +1190,31 @@ class SelectionDetailsWidget(QtWidgets.QWidget):
             )
         )
         chip_layout.addWidget(DetailChip("Freshness", days_since_text))
+        trainer_jockey_percentage = selection.trainer_jockey_win_percentage
         chip_layout.addWidget(
             DetailChip(
                 "T/J Win",
-                f"{selection.trainer_jockey_win_percentage:.0f}%",
-                accent="red" if selection.trainer_jockey_win_percentage >= 20 else "",
+                (
+                    f"{trainer_jockey_percentage:.0f}%"
+                    if trainer_jockey_percentage is not None
+                    else "-"
+                ),
+                accent=(
+                    "red"
+                    if trainer_jockey_percentage is not None
+                    and trainer_jockey_percentage >= 20
+                    else ""
+                ),
             )
         )
+        punters_edge = selection.punters_edge
         chip_layout.addWidget(
             DetailChip(
                 "Edge",
-                f"{selection.punters_edge:.2f}",
-                accent="orange" if selection.punters_edge > 0 else "",
+                f"{punters_edge:.2f}" if punters_edge is not None else "-",
+                accent=(
+                    "orange" if punters_edge is not None and punters_edge > 0 else ""
+                ),
             )
         )
 
@@ -1264,6 +1283,8 @@ class SelectionsWidget(QtWidgets.QWidget):
         layout.setContentsMargins(4, 6, 4, 6)
         layout.setSpacing(8)
         layout.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignTop))
+
+        layout.addWidget(SelectionDetailsWidget(selection, self.venue))
 
         if selection.runs:
             layout.addWidget(RunsTitleWidget())
@@ -1582,14 +1603,14 @@ class EventStatsWidget(QtWidgets.QWidget):
             )
 
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
-        layout.addWidget(SubtitleLabel("wWet W/P %"))
+        layout.addWidget(SubtitleLabel("Wet W/P %"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
         weighted_wet_win_place_values = []
-        for selection in selections:
+        for selection in event.selections:
             weighted_wet_win_place = (
-                selection.wet_runs_win_percentage * 2
-                + selection.wet_runs_place_percentage
+                (selection.wet_runs_win_percentage or 0.0) * 2
+                + (selection.wet_runs_place_percentage or 0.0)
             ) / 3
             weighted_wet_win_place_values.append(
                 (selection.number, weighted_wet_win_place)
@@ -1598,8 +1619,6 @@ class EventStatsWidget(QtWidgets.QWidget):
         weighted_wet_win_place_values = weighted_wet_win_place_values[:9]
         # graph based on barrier and predicted speed values
         for wet_win_place in weighted_wet_win_place_values:
-            if wet_win_place[1] is None:
-                wet_win_place[1] = 0.0
             layout.addWidget(
                 SelectionGraphWidget(wet_win_place[1], 100, wet_win_place[0]),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop,
@@ -1652,58 +1671,52 @@ class EventModelWidget(QtWidgets.QWidget):
         layout.addWidget(SubtitleLabel("Punter Edge"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        selections = event.selections
-        for selection in selections:
-            if selection.punters_edge is None:
-                selection.punters_edge = 0.0
-            if selection.prediction.model_output is None:
-                selection.prediction.model_output = 0.0
-            if selection.prediction.winning_chance is None:
-                selection.prediction.winning_chance = 0.0
-        selections.sort(key=lambda x: x.punters_edge, reverse=True)
-        selections = selections[:9]
+        selections = sorted(
+            event.selections,
+            key=lambda x: x.punters_edge if x.punters_edge is not None else 0.0,
+            reverse=True,
+        )[:9]
         # graph based on barrier and predicted speed values
         for selection in selections:
-            value = selection.punters_edge
+            value = (
+                selection.punters_edge if selection.punters_edge is not None else 0.0
+            )
             layout.addWidget(
                 SelectionGraphWidget(value, 1.0, selection.number),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop,
             )
 
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
-        layout.addWidget(SubtitleLabel("Model Output"))
+        layout.addWidget(SubtitleLabel("Predictor"))
         layout.addWidget(QHLine())
         layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
         selections = sorted(
-            selections, key=lambda x: x.prediction.model_output, reverse=True
+            event.selections,
+            key=lambda x: x.predictor_score if x.predictor_score is not None else 0.0,
+            reverse=True,
         )[:9]
-        max_value = max([x.prediction.model_output for x in selections]) * 1.1
+        max_value = max(
+            [
+                x.predictor_score if x.predictor_score is not None else 0.0
+                for x in selections
+            ],
+            default=0.0,
+        )
         # graph based on barrier and predicted speed values
         for selection in selections:
-            value = selection.prediction.model_output
+            value = (
+                selection.predictor_score
+                if selection.predictor_score is not None
+                else 0.0
+            )
             layout.addWidget(
                 SelectionGraphWidget(value, max_value, selection.number),
                 alignment=QtCore.Qt.AlignmentFlag.AlignTop,
             )
 
-        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 10))
-        layout.addWidget(SubtitleLabel("Winning Chance"))
-        layout.addWidget(QHLine())
-        layout.addSpacerItem(QtWidgets.QSpacerItem(0, 5))
-        selections = sorted(
-            selections, key=lambda x: x.prediction.winning_chance, reverse=True
-        )[:9]
-        # graph based on barrier and predicted speed values
-        for selection in selections:
-            value = selection.prediction.winning_chance
-            layout.addWidget(
-                SelectionGraphWidget(value, 0.85, selection.number),
-                alignment=QtCore.Qt.AlignmentFlag.AlignTop,
-            )
-
 
 ANALYSIS_VIEWS = [
-    ("model", "Model Analysis", EventModelWidget),
+    ("model", "Predictor Analysis", EventModelWidget),
     ("speed", "Speed Analysis", EventSpeedWidget),
     ("stats", "Stats Analysis", EventStatsWidget),
 ]
@@ -2010,10 +2023,11 @@ class ScraperTab(QtWidgets.QScrollArea):
 
         parent = self.parent()
         tab_widget = parent.parent() if parent is not None else None
-        if type(tab_widget) is QtWidgets.QTabWidget:
-            for i in reversed(range(tab_widget.count())):
-                if tab_widget.tabText(i) != "Home":
-                    tab_widget.removeTab(i)
+        if isinstance(tab_widget, QtWidgets.QTabWidget):
+            tabs = cast(QtWidgets.QTabWidget, tab_widget)
+            for i in reversed(range(tabs.count())):
+                if tabs.tabText(i) != "Home":
+                    tabs.removeTab(i)
 
         for i in reversed(range(self.meetings_form.count())):
             item = self.meetings_form.itemAt(i)
@@ -2031,23 +2045,25 @@ class ScraperTab(QtWidgets.QScrollArea):
         self.app_state.set_loading(True)
 
         scrape_date = datetime(date.year(), date.month(), date.day())
-        self.worker_thread = QtCore.QThread(self)
-        self.worker = MeetingsLoadWorker(
+        worker_thread = QtCore.QThread(self)
+        worker = MeetingsLoadWorker(
             scraper=self.scraper,
             scrape_date=scrape_date,
             use_local_data=self.local_checkbox.isChecked(),
         )
-        self.worker.moveToThread(self.worker_thread)
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.on_meetings_loaded)
-        self.worker.failed.connect(self.on_meetings_failed)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.failed.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker.failed.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-        self.worker_thread.finished.connect(self.on_worker_finished)
-        self.worker_thread.start()
+        self.worker_thread = worker_thread
+        self.worker = worker
+        worker.moveToThread(worker_thread)
+        worker_thread.started.connect(worker.run)
+        worker.finished.connect(self.on_meetings_loaded)
+        worker.failed.connect(self.on_meetings_failed)
+        worker.finished.connect(worker_thread.quit)
+        worker.failed.connect(worker_thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        worker_thread.finished.connect(worker_thread.deleteLater)
+        worker_thread.finished.connect(self.on_worker_finished)
+        worker_thread.start()
 
     def on_meetings_loaded(self, meetings: list[Meeting]):
         self.app_state.set_meetings(meetings)

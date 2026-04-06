@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from statistics import stdev
 from typing import Literal, Optional
@@ -135,6 +135,150 @@ class Prediction:
             speed=data.get("speedMeasure", 0.0),
             finish_speed=data.get("finishSpeed", 0.0),
         )
+
+
+@dataclass
+class PredictorRatings:
+    weight: float = 0.0
+    barrier: float = 0.0
+    career_win_rate: float = 0.0
+    career_place_rate: float = 0.0
+    career_prize_money: float = 0.0
+    average_prize_money: float = 0.0
+    jockey_wins: float = 0.0
+    jockey_horse_wins: float = 0.0
+    trainer_wins: float = 0.0
+    track_placings: float = 0.0
+    dist_placings: float = 0.0
+    track_dist_placings: float = 0.0
+    firm_placings: float = 0.0
+    good_placings: float = 0.0
+    soft_placings: float = 0.0
+    heavy_placings: float = 0.0
+    synth_placings: float = 0.0
+    late_speed: float = 0.0
+
+    @classmethod
+    def from_dict(cls, data: dict | None) -> "PredictorRatings":
+        if data is None:
+            return cls()
+        return cls(
+            weight=float(data.get("weight", 0.0) or 0.0),
+            barrier=float(data.get("barrier", 0.0) or 0.0),
+            career_win_rate=float(data.get("careerWinRate", 0.0) or 0.0),
+            career_place_rate=float(data.get("careerPlaceRate", 0.0) or 0.0),
+            career_prize_money=float(data.get("careerPrizeMoney", 0.0) or 0.0),
+            average_prize_money=float(data.get("averagePrizeMoney", 0.0) or 0.0),
+            jockey_wins=float(data.get("jockeyWins", 0.0) or 0.0),
+            jockey_horse_wins=float(data.get("jockeyHorseWins", 0.0) or 0.0),
+            trainer_wins=float(data.get("trainerWins", 0.0) or 0.0),
+            track_placings=float(data.get("trackPlacings", 0.0) or 0.0),
+            dist_placings=float(data.get("distPlacings", 0.0) or 0.0),
+            track_dist_placings=float(data.get("trackDistPlacings", 0.0) or 0.0),
+            firm_placings=float(data.get("firmPlacings", 0.0) or 0.0),
+            good_placings=float(data.get("goodPlacings", 0.0) or 0.0),
+            soft_placings=float(data.get("softPlacings", 0.0) or 0.0),
+            heavy_placings=float(data.get("heavyPlacings", 0.0) or 0.0),
+            synth_placings=float(data.get("synthPlacings", 0.0) or 0.0),
+            late_speed=float(data.get("lateSpeed", 0.0) or 0.0),
+        )
+
+
+@dataclass
+class PredictorSettingsPreset:
+    name: str = "Balanced"
+    weight: float = 0.0
+    barrier: float = 0.0
+    career_win_rate: float = 0.0
+    career_place_rate: float = 0.0
+    career_prize_money: float = 0.0
+    average_prize_money: float = 0.0
+    jockey_wins: float = 0.0
+    jockey_horse_wins: float = 0.0
+    trainer_wins: float = 0.0
+    track_placings: float = 0.0
+    dist_placings: float = 0.0
+    track_dist_placings: float = 0.0
+    firm_placings: float = 0.0
+    good_placings: float = 0.0
+    soft_placings: float = 0.0
+    heavy_placings: float = 0.0
+    synth_placings: float = 0.0
+    late_speed: float = 0.0
+
+    @classmethod
+    def from_dict(cls, data: dict | None) -> "PredictorSettingsPreset":
+        if data is None:
+            return cls()
+        return cls(
+            name=data.get("name", "Balanced") or "Balanced",
+            weight=float(data.get("weight", 0.0) or 0.0),
+            barrier=float(data.get("barrier", 0.0) or 0.0),
+            career_win_rate=float(data.get("careerWinRate", 0.0) or 0.0),
+            career_place_rate=float(data.get("careerPlaceRate", 0.0) or 0.0),
+            career_prize_money=float(data.get("careerPrizeMoney", 0.0) or 0.0),
+            average_prize_money=float(data.get("averagePrizeMoney", 0.0) or 0.0),
+            jockey_wins=float(data.get("jockeyWins", 0.0) or 0.0),
+            jockey_horse_wins=float(data.get("jockeyHorseWins", 0.0) or 0.0),
+            trainer_wins=float(data.get("trainerWins", 0.0) or 0.0),
+            track_placings=float(data.get("trackPlacings", 0.0) or 0.0),
+            dist_placings=float(data.get("distPlacings", 0.0) or 0.0),
+            track_dist_placings=float(data.get("trackDistPlacings", 0.0) or 0.0),
+            firm_placings=float(data.get("firmPlacings", 0.0) or 0.0),
+            good_placings=float(data.get("goodPlacings", 0.0) or 0.0),
+            soft_placings=float(data.get("softPlacings", 0.0) or 0.0),
+            heavy_placings=float(data.get("heavyPlacings", 0.0) or 0.0),
+            synth_placings=float(data.get("synthPlacings", 0.0) or 0.0),
+            late_speed=float(data.get("lateSpeed", 0.0) or 0.0),
+        )
+
+    def _surface_weight_and_rating(
+        self, ratings: PredictorRatings, track_condition: str, track_type: str
+    ) -> tuple[float, float]:
+        lower_track_type = (track_type or "").lower()
+        lower_track_condition = (track_condition or "").lower()
+
+        if "synth" in lower_track_type:
+            return self.synth_placings, ratings.synth_placings
+        if lower_track_condition.startswith("firm"):
+            return self.firm_placings, ratings.firm_placings
+        if lower_track_condition.startswith("heavy"):
+            return self.heavy_placings, ratings.heavy_placings
+        if lower_track_condition.startswith("soft"):
+            return self.soft_placings, ratings.soft_placings
+        if lower_track_condition.startswith("good"):
+            return self.good_placings, ratings.good_placings
+        return self.good_placings, ratings.good_placings
+
+    def score(
+        self, ratings: PredictorRatings, track_condition: str, track_type: str
+    ) -> float:
+        surface_weight, surface_rating = self._surface_weight_and_rating(
+            ratings, track_condition, track_type
+        )
+        components = [
+            (self.weight, ratings.weight),
+            (self.barrier, ratings.barrier),
+            (self.career_win_rate, ratings.career_win_rate),
+            (self.career_place_rate, ratings.career_place_rate),
+            (self.career_prize_money, ratings.career_prize_money),
+            (self.average_prize_money, ratings.average_prize_money),
+            (self.jockey_wins, ratings.jockey_wins),
+            (self.jockey_horse_wins, ratings.jockey_horse_wins),
+            (self.trainer_wins, ratings.trainer_wins),
+            (self.track_placings, ratings.track_placings),
+            (self.dist_placings, ratings.dist_placings),
+            (self.track_dist_placings, ratings.track_dist_placings),
+            (surface_weight, surface_rating),
+            (self.late_speed, ratings.late_speed),
+        ]
+        total_weight = sum(weight for weight, _ in components if weight > 0)
+        if total_weight == 0:
+            return 0.0
+        total_score = sum(
+            weight * rating for weight, rating in components if weight > 0
+        )
+        return total_score / total_weight
 
 
 @dataclass
@@ -879,6 +1023,8 @@ class Selection:
     roi: float
     odds: list[Odds]
     preparation_stats: PreparationStats
+    predictor_ratings: PredictorRatings = field(default_factory=PredictorRatings)
+    predictor_score: float = 0.0
 
     @classmethod
     def from_dict(cls, data: dict) -> "Selection":
@@ -911,6 +1057,8 @@ class Selection:
                 roi=0.0,
                 odds=[],
                 preparation_stats=PreparationStats.from_runs([]),
+                predictor_ratings=PredictorRatings(),
+                predictor_score=0.0,
             )
 
         competitor = data.get("competitor")
@@ -974,6 +1122,10 @@ class Selection:
             roi=0.0,
             odds=[],
             preparation_stats=PreparationStats.from_runs([]),
+            predictor_ratings=PredictorRatings.from_dict(
+                data.get("predictorRatings", {})
+            ),
+            predictor_score=0.0,
         )
 
     def add_runs(self, runs: list[dict]):
@@ -1033,6 +1185,16 @@ class Selection:
 
     def add_preparation_stats(self):
         self.preparation_stats = PreparationStats.from_runs(self.runs)
+
+    def apply_predictor_settings(
+        self,
+        predictor_settings: PredictorSettingsPreset,
+        track_condition: str,
+        track_type: str,
+    ):
+        self.predictor_score = predictor_settings.score(
+            self.predictor_ratings, track_condition, track_type
+        )
 
 
 @dataclass
