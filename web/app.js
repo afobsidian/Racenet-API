@@ -5,6 +5,10 @@ const state = {
   analysisMode: "predictor",
 };
 
+const TRAINER_JOCKEY_STATS_WEIGHT = 2;
+const WET_PLACE_STATS_WEIGHT = 1;
+const TOTAL_STATS_WEIGHT = TRAINER_JOCKEY_STATS_WEIGHT + WET_PLACE_STATS_WEIGHT;
+
 const refs = {
   dateInput: document.getElementById("dateInput"),
   localToggle: document.getElementById("localToggle"),
@@ -466,7 +470,10 @@ function topSelections(selections, selector, limit) {
 }
 
 function weightedStatsValue(selection) {
-  return ((safeNumber(selection.trainer_jockey_win_percentage) * 2) + safeNumber(selection.wet_runs_place_percentage)) / 3;
+  return (
+    (safeNumber(selection.trainer_jockey_win_percentage) * TRAINER_JOCKEY_STATS_WEIGHT) +
+    (safeNumber(selection.wet_runs_place_percentage) * WET_PLACE_STATS_WEIGHT)
+  ) / TOTAL_STATS_WEIGHT;
 }
 
 function numericInsightValue(selection, title) {
