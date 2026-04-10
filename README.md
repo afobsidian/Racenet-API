@@ -1,5 +1,36 @@
 # Horse Racing Racenet API scraper
 
+## Go Web Interface (Phase 2)
+
+The repository now also includes a Go web application that renders the existing
+meeting data in a dark web UI and keeps the current Racenet-backed scraper as
+the live data source.
+
+Run it from the repository root with:
+
+```bash
+go run .
+```
+
+Then open `http://localhost:8080`.
+
+- `Use local data` reads `meetings_cache.json`.
+- Clearing `Use local data` triggers a live fetch through the existing Python
+  scraper modules, then updates `meetings_cache.json`.
+
+### Phase 2 feature set
+
+- **Date navigation** — `‹` / `›` buttons step the date picker one day at a time.
+- **Keyboard shortcuts** — `←` / `→` arrow keys switch races; `↑` / `↓` switch meetings (works when no form field is focused).
+- **Selection filter** — type in the search box above the selection list to filter runners by name.
+- **Selection sort** — sort the list by barrier number, punters edge, predictor score, speed rating, or win odds.
+- **Countdown auto-refresh** — the race countdown updates every second.
+- **Market book percentage** — a chip on the event overview shows the win-book overround, coloured green / amber / red.
+- **Preparation profile** — first-up, second-up, third-up, and nth-up win percentages with average time differences are shown inside each expanded selection (when data is available).
+- **Predictor component breakdown** — individual predictor rating components are shown as a bar chart inside each expanded selection (when any component is non-zero).
+- **Price history** — win-odds fluctuation chart with movement indicator inside each expanded selection (when two or more price points exist).
+- **Enhanced form runs** — the runs table now includes a `Price` column (open/fluct/SP), a `Rivals` column (competitors that have since won), and position-at-distance tooltips on the `Pos` cell. The `Date` cell tooltip shows the video comment / race note for that run.
+
 ## Install
 
 To create virtual env to run, navigate to directory containing "requirements.txt" and perform the following:

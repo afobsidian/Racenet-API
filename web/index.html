@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Racenet Web</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Go web migration</p>
+          <h1>Racenet Web</h1>
+        </div>
+        <div class="status-cluster">
+          <span id="sourceBadge" class="badge">cache</span>
+          <span id="statusText" class="status-text">Ready</span>
+        </div>
+      </header>
+
+      <section class="toolbar card">
+        <label>
+          <span>Date</span>
+          <div class="date-nav-group">
+            <button id="prevDateButton" type="button" class="nav-button" title="Previous day">‹</button>
+            <input id="dateInput" type="date" />
+            <button id="nextDateButton" type="button" class="nav-button" title="Next day">›</button>
+          </div>
+        </label>
+        <label class="checkbox">
+          <input id="localToggle" type="checkbox" checked />
+          <span>Use local data</span>
+        </label>
+        <button id="loadButton" type="button">Extract</button>
+      </section>
+
+      <main class="workspace">
+        <div class="top-grid">
+          <aside class="sidebar card">
+            <div class="section-heading">
+              <h2>Meetings</h2>
+              <span id="meetingCount" class="muted">0 loaded</span>
+            </div>
+            <div id="meetingList" class="meeting-list"></div>
+          </aside>
+
+          <section class="content">
+            <div id="emptyState" class="empty card">
+              Load meetings to browse races, analysis, tooltips, and selection details.
+            </div>
+
+            <div id="meetingView" class="meeting-view hidden">
+              <section class="card section">
+                <div id="meetingHeader"></div>
+              </section>
+
+              <div class="overview-grid">
+                <section class="card section event-panel">
+                  <div class="section-heading">
+                    <h2>Events</h2>
+                    <span id="eventMeta" class="muted"></span>
+                  </div>
+                  <div id="eventButtons" class="event-buttons"></div>
+                  <div id="eventDetails" class="event-details"></div>
+                  <div class="section-heading analysis-heading">
+                    <h2>Analysis</h2>
+                    <select id="analysisSelect">
+                      <option value="predictor">Predictor</option>
+                      <option value="speed">Speed</option>
+                      <option value="stats">Stats</option>
+                    </select>
+                  </div>
+                  <div id="analysisBody"></div>
+                </section>
+
+                <aside class="card section insights-panel">
+                  <div class="section-heading">
+                    <h2>Insights</h2>
+                    <span class="muted">Punters edge · Predictor · Speed · Stats</span>
+                  </div>
+                  <div id="insightsPane" class="insights-stack"></div>
+                </aside>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section id="selectionSection" class="card section hidden">
+          <div class="section-heading">
+            <h2>Selections</h2>
+            <div class="selection-controls">
+              <input id="filterInput" type="search" placeholder="Filter by name…" />
+              <select id="sortSelect">
+                <option value="number">Sort: Number</option>
+                <option value="edge">Sort: Edge</option>
+                <option value="predictor">Sort: Predictor</option>
+                <option value="speed">Sort: Speed</option>
+                <option value="odds">Sort: Win Odds</option>
+              </select>
+              <span class="muted">Left click to expand · Right click to copy · ← → events · ↑ ↓ meetings</span>
+            </div>
+          </div>
+          <div id="selectionList" class="selection-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>
