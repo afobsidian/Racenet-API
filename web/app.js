@@ -21,6 +21,8 @@ const refs = {
   eventDetails: document.getElementById("eventDetails"),
   analysisSelect: document.getElementById("analysisSelect"),
   analysisBody: document.getElementById("analysisBody"),
+  insightsPane: document.getElementById("insightsPane"),
+  selectionSection: document.getElementById("selectionSection"),
   selectionList: document.getElementById("selectionList"),
 };
 
@@ -59,8 +61,11 @@ async function loadMeetings() {
     console.error(error);
     setStatus(String(error.message || error), true);
     refs.meetingList.innerHTML = "";
+    refs.insightsPane.innerHTML = "";
+    refs.selectionList.innerHTML = "";
     refs.emptyState.classList.add("visible");
     refs.meetingView.classList.add("hidden");
+    refs.selectionSection.classList.add("hidden");
   } finally {
     refs.loadButton.disabled = false;
   }
@@ -107,11 +112,13 @@ function renderMeeting() {
   if (!meeting) {
     refs.emptyState.classList.add("visible");
     refs.meetingView.classList.add("hidden");
+    refs.selectionSection.classList.add("hidden");
     return;
   }
 
   refs.emptyState.classList.remove("visible");
   refs.meetingView.classList.remove("hidden");
+  refs.selectionSection.classList.remove("hidden");
 
   const events = Array.isArray(meeting.events) ? meeting.events : [];
   const event = events[state.selectedEventIndex] || events[0];
@@ -119,7 +126,9 @@ function renderMeeting() {
     refs.eventButtons.innerHTML = "";
     refs.eventDetails.innerHTML = "<p class='subtle'>No events available.</p>";
     refs.analysisBody.innerHTML = "";
+    refs.insightsPane.innerHTML = "";
     refs.selectionList.innerHTML = "";
+    refs.selectionSection.classList.add("hidden");
     return;
   }
   state.selectedEventIndex = events.indexOf(event);
@@ -151,20 +160,23 @@ function renderMeeting() {
   });
 
   refs.eventDetails.innerHTML = `
+    <div class="event-highlight-grid">
+      ${summaryCard("Countdown", formatCountdown(event.time), event.time || "TBC", "primary")}
+      ${summaryCard("Prize", formatCurrency(event.prize_money), `${formatNumber(event.starters)} runners`, "purple")}
+      ${summaryCard("Pace", formatFloat(event.pace), tooltipText(event.comments), "warning")}
+      ${summaryCard("Track", `${event.track_condition || "?"} · ${event.track_type || "?"}`, event.weather || "n/a", "success")}
+    </div>
     <div class="chip-row">
-      ${chip("Countdown", formatCountdown(event.time))}
-      ${chip("Distance", `${formatNumber(event.distance)}m`)}
-      ${chip("Prize", formatCurrency(event.prize_money))}
-      ${chip("Pace", event.pace || "n/a", tooltipText(event.comments))}
-      ${chip("Class", event._class || "n/a")}
-      ${chip("Track", `${event.track_condition || "?"} · ${event.track_type || "?"}`)}
-      ${chip("Weather", event.weather || "n/a")}
-      ${chip("Starters", formatNumber(event.starters))}
+      ${tonedChip("Distance", `${formatNumber(event.distance)}m`, "", "primary")}
+      ${tonedChip("Class", event._class || "n/a", "", "purple")}
+      ${tonedChip("Weather", event.weather || "n/a", "", "success")}
+      ${tonedChip("Starters", formatNumber(event.starters), "", "warning")}
     </div>
   `;
 
   refs.analysisSelect.value = state.analysisMode;
   refs.analysisBody.innerHTML = renderAnalysis(event);
+  refs.insightsPane.innerHTML = renderInsights(event);
   refs.selectionList.innerHTML = renderSelections(event);
   wireInteractiveElements();
 }
@@ -214,6 +226,7 @@ function renderSelections(event) {
     const runs = Array.isArray(selection.runs) ? selection.runs.slice(0, 10) : [];
     const winOdds = findOdds(selection.odds, "Win");
     const placeOdds = findOdds(selection.odds, "Place");
+    const edgeScore = scoreClass(selection.punters_edge);
     const trainerTitle = tooltipText(selection.trainer?.name, [
       `Win ${percent(selection.trainer?.last_year_win_percentage)}`,
       `Place ${percent(selection.trainer?.last_year_place_percentage)}`,
@@ -225,7 +238,7 @@ function renderSelections(event) {
     ]);
 
     return `
-      <details class="selection-card">
+      <details class="selection-card edge-${edgeScore}">
         <summary class="selection-summary" data-copy="${escapeHtmlAttribute(copyText(selection, winOdds, placeOdds))}">
           <div class="selection-topline">
             <span class="selection-number">${escapeHtml(formatNumber(selection.number))}</span>
@@ -235,13 +248,13 @@ function renderSelections(event) {
             </div>
           </div>
           <div class="selection-summary-grid">
-            ${chip("Win", formatPrice(winOdds?.price))}
-            ${chip("Place", formatPrice(placeOdds?.price))}
-            ${chip("Barrier", formatNumber(selection.barrier))}
-            ${chip("Weight", formatFloat(selection.weight))}
-            ${chip("ROI", percent(selection.roi))}
-            ${chip("Prep", formatNumber(selection.runs_since_spell))}
-            ${chip("Edge", formatFloat(selection.punters_edge), "", scoreClass(selection.punters_edge))}
+            ${tonedChip("Win", formatPrice(winOdds?.price), "", "success")}
+            ${tonedChip("Place", formatPrice(placeOdds?.price), "", "primary")}
+            ${tonedChip("Barrier", formatNumber(selection.barrier), "", "warning")}
+            ${tonedChip("Weight", formatFloat(selection.weight), "", "purple")}
+            ${tonedChip("ROI", percent(selection.roi), "", percentageTone(selection.roi))}
+            ${tonedChip("Prep", formatNumber(selection.runs_since_spell), "", "primary")}
+            ${chip("Edge", formatFloat(selection.punters_edge), "", edgeScore)}
           </div>
         </summary>
         <div class="selection-body">
@@ -355,6 +368,125 @@ function renderTable(headers, rows) {
 
 function chip(label, value, title = "", score = 0) {
   return `<span class="chip${score ? ` score-${score}` : ""}" title="${escapeHtmlAttribute(title)}"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value ?? "n/a"))}</span>`;
+}
+
+function tonedChip(label, value, title = "", tone = "") {
+  return `<span class="chip chip-tone-${escapeHtml(tone || "neutral")}" title="${escapeHtmlAttribute(title)}"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value ?? "n/a"))}</span>`;
+}
+
+function summaryCard(label, value, subtitle = "", tone = "primary") {
+  return `
+    <div class="summary-card tone-${escapeHtml(tone)}" title="${escapeHtmlAttribute(subtitle)}">
+      <span class="summary-label">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value ?? "n/a"))}</strong>
+      <span class="summary-subtle">${escapeHtml(subtitle || " ")}</span>
+    </div>
+  `;
+}
+
+function renderInsights(event) {
+  const selections = [...(event.selections || [])];
+  return [
+    renderInsightBlock(
+      "Punters Edge",
+      "Best overlays in the field",
+      topSelections(selections, (selection) => selection.punters_edge, 5),
+      (selection) => formatFloat(selection.punters_edge),
+      (selection) => `${selection.prediction?.normalized_speed_position || "No speed tag"} · Win ${formatPrice(findOdds(selection.odds, "Win")?.price)}`,
+      "warning",
+    ),
+    renderInsightBlock(
+      "Predictor",
+      "Model score leaders",
+      topSelections(selections, (selection) => selection.predictor_score, 5),
+      (selection) => formatFloat(selection.predictor_score),
+      (selection) => `Rank ${formatNumber(selection.prediction?.model_rank)} · Chance ${percent(selection.prediction?.winning_chance)}`,
+      "purple",
+    ),
+    renderInsightBlock(
+      "Speed",
+      "Early pace and finish strength",
+      topSelections(selections, (selection) => selection.prediction?.speed, 5),
+      (selection) => `${formatFloat(selection.prediction?.speed)} / ${formatFloat(selection.prediction?.finish_speed)}`,
+      (selection) => selection.prediction?.normalized_speed_position || "No speed tag",
+      "primary",
+    ),
+    renderInsightBlock(
+      "Stats",
+      "Trainer / jockey and wet profile",
+      topSelections(selections, weightedStatsValue, 5),
+      (selection) => `${percent(selection.trainer_jockey_win_percentage)} · ${percent(selection.wet_runs_win_percentage)}`,
+      (selection) => `Wet place ${percent(selection.wet_runs_place_percentage)} · Avg prize ${formatCurrency(selection.average_prize_money)}`,
+      "success",
+    ),
+  ].join("");
+}
+
+function renderInsightBlock(title, subtitle, selections, valueFormatter, metaFormatter, tone) {
+  const maxValue = Math.max(...selections.map((selection) => numericInsightValue(selection, title)), 0);
+  return `
+    <section class="insight-block tone-${escapeHtml(tone)}">
+      <div class="insight-heading">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p class="subtle">${escapeHtml(subtitle)}</p>
+        </div>
+      </div>
+      <div class="insight-rows">
+        ${selections.map((selection) => renderInsightRow(selection, valueFormatter(selection), metaFormatter(selection), tone, maxValue, title)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderInsightRow(selection, valueText, metaText, tone, maxValue, title) {
+  const rawValue = numericInsightValue(selection, title);
+  const width = maxValue > 0 ? Math.max(8, (rawValue / maxValue) * 100) : 8;
+  return `
+    <div class="insight-row">
+      <div class="insight-copy">
+        <div class="insight-topline">
+          <span class="number-pill tone-${escapeHtml(tone)}">${escapeHtml(formatNumber(selection.number))}</span>
+          <strong>${escapeHtml(selection.name || "Unknown")}</strong>
+        </div>
+        <span class="subtle">${escapeHtml(metaText)}</span>
+      </div>
+      <div class="insight-value">
+        <strong>${escapeHtml(valueText)}</strong>
+        <span class="meter"><span class="meter-fill tone-${escapeHtml(tone)}" style="width:${width}%"></span></span>
+      </div>
+    </div>
+  `;
+}
+
+function topSelections(selections, selector, limit) {
+  return [...selections]
+    .sort((left, right) => safeNumber(selector(right)) - safeNumber(selector(left)))
+    .slice(0, limit);
+}
+
+function weightedStatsValue(selection) {
+  return ((safeNumber(selection.trainer_jockey_win_percentage) * 2) + safeNumber(selection.wet_runs_place_percentage)) / 3;
+}
+
+function numericInsightValue(selection, title) {
+  if (title === "Punters Edge") return safeNumber(selection.punters_edge);
+  if (title === "Predictor") return safeNumber(selection.predictor_score);
+  if (title === "Speed") return safeNumber(selection.prediction?.speed);
+  return weightedStatsValue(selection);
+}
+
+function safeNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function percentageTone(value) {
+  const number = safeNumber(value);
+  if (number >= 50) return "purple";
+  if (number > 0) return "success";
+  if (number < 0) return "danger";
+  return "neutral";
 }
 
 function currentMeeting() {
