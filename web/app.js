@@ -14,6 +14,8 @@ const STATS_INSIGHT_WEIGHTS = Object.freeze({
 });
 const TOTAL_STATS_INSIGHT_WEIGHT = STATS_INSIGHT_WEIGHTS.trainerJockeyWin + STATS_INSIGHT_WEIGHTS.wetPlaceProfile;
 
+const SPELL_SEPARATOR = "\xb7";
+
 const refs = {
   dateInput: document.getElementById("dateInput"),
   localToggle: document.getElementById("localToggle"),
@@ -330,8 +332,8 @@ function renderAnalysis(event) {
 // Ordinal suffix: 1st, 2nd, 3rd, 4th…
 function ordinalSuffix(n) {
   const abs = Math.abs(n);
-  const mod100 = abs % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  const lastTwoDigits = abs % 100;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 13) return `${n}th`;
   switch (abs % 10) {
     case 1: return `${n}st`;
     case 2: return `${n}nd`;
@@ -406,7 +408,7 @@ function formatRunTime(value) {
   // string like "01:25.720" — trim leading "0" minute if present
   const str = String(value);
   if (str === "0" || str === "0.0" || str === "None") return "n/a";
-  // strip trailing chars and leading 0-minute
+  // string like "01:25.720" — strip non-digit, non-colon, non-period characters then trim leading 0-minute
   const clean = str.replace(/[^\d:.]/g, "");
   if (clean.startsWith("0:")) return clean.slice(2);
   return clean || "n/a";
@@ -678,7 +680,7 @@ function renderRunsTable(runs, selectionIndex, selection) {
 
     // Spell separator: if there are >= 60 days since last start, insert a divider row
     if (runIndex > 0 && safeNumber(run.days_since_last) >= 60) {
-      rows.push(`<tr class="spell-row"><td colspan="${headers.length}"><span class="spell-label">Spell · ${escapeHtml(String(run.days_since_last))} days</span></td></tr>`);
+      rows.push(`<tr class="spell-row"><td colspan="${headers.length}"><span class="spell-label">Spell ${SPELL_SEPARATOR} ${escapeHtml(String(run.days_since_last))} days</span></td></tr>`);
     }
 
     const wTone = run.is_trial ? "" : weightRunTone(run.weight, selWeight);
