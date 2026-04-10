@@ -34,6 +34,7 @@ from workers import MeetingsLoadWorker
 
 SCREEN_SIZE = QtCore.QSize()
 FONT = "Helvetica"
+BASE_FONT_POINT_SIZE = 12
 ANALYSIS_VIEWS: list[tuple[str, str, Callable[[Event], QtWidgets.QWidget]]] = []
 
 
@@ -43,6 +44,43 @@ def screen_width_percentage(percentage: float) -> int:
 
 def screen_height_percentage(percentage: float) -> int:
     return int(SCREEN_SIZE.height() * percentage)
+
+
+def scaled_font_size(point_size: int) -> int:
+    app = QtWidgets.QApplication.instance()
+    if not isinstance(app, QtWidgets.QApplication):
+        return point_size
+
+    base_size = app.font().pointSizeF()
+    if base_size <= 0:
+        return point_size
+
+    scale = max(1.0, base_size / BASE_FONT_POINT_SIZE)
+    return max(point_size, round(point_size * scale))
+
+
+def build_font(
+    point_size: int,
+    weight: QtGui.QFont.Weight = QtGui.QFont.Weight.Normal,
+) -> QtGui.QFont:
+    return QtGui.QFont(FONT, scaled_font_size(point_size), weight=weight)
+
+
+def monitor_font_point_size(screen: Optional[QtGui.QScreen]) -> int:
+    if screen is None:
+        return BASE_FONT_POINT_SIZE
+
+    geometry = screen.availableGeometry().size()
+    geometry_scale = min(
+        geometry.width() / 1600 if geometry.width() else 1.0,
+        geometry.height() / 900 if geometry.height() else 1.0,
+    )
+    dpi_scale = screen.logicalDotsPerInch() / 96 if screen.logicalDotsPerInch() else 1.0
+    scale = min(max(1.0, max(geometry_scale, dpi_scale)), 1.8)
+    return max(
+        BASE_FONT_POINT_SIZE,
+        round(BASE_FONT_POINT_SIZE * (1 + (scale - 1) * 0.45)),
+    )
 
 
 def qt_alignment(*flags: QtCore.Qt.AlignmentFlag) -> QtCore.Qt.AlignmentFlag:
@@ -93,21 +131,21 @@ class EventTickTimer(QtCore.QTimer):
 class TitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(TitleLabel, self).__init__(text)
-        self.setFont(QtGui.QFont(FONT, 26, weight=QtGui.QFont.Weight.Bold))
+        self.setFont(build_font(26, QtGui.QFont.Weight.Bold))
         self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
 
 
 class SubtitleLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(SubtitleLabel, self).__init__(text)
-        self.setFont(QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold))
+        self.setFont(build_font(16, QtGui.QFont.Weight.Bold))
         self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignCenter))
 
 
 class HeadingLabel(QtWidgets.QLabel):
     def __init__(self, text: str):
         super(HeadingLabel, self).__init__(text)
-        self.setFont(QtGui.QFont(FONT, 10, weight=QtGui.QFont.Weight.Bold))
+        self.setFont(build_font(10, QtGui.QFont.Weight.Bold))
         self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
 
 
@@ -122,7 +160,7 @@ class InfoLabel(QtWidgets.QLabel):
         else:
             text = str(data)
         super(InfoLabel, self).__init__(text)
-        self.setFont(QtGui.QFont(FONT, font_size))
+        self.setFont(build_font(font_size))
         self.setAlignment(qt_alignment(QtCore.Qt.AlignmentFlag.AlignLeft))
         self.setStyleSheet("background-color: transparent;")
 
@@ -310,7 +348,7 @@ class DetailChip(QtWidgets.QFrame):
 
         title_label = QtWidgets.QLabel(title.upper())
         title_label.setStyleSheet("color: #9fb0bd; background-color: transparent;")
-        title_font = QtGui.QFont(FONT, 8)
+        title_font = build_font(8)
         title_font.setCapitalization(QtGui.QFont.Capitalization.AllUppercase)
         title_label.setFont(title_font)
 
@@ -603,7 +641,7 @@ class RunsTitleWidget(QtWidgets.QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFont(QtGui.QFont(FONT, 10, weight=QtGui.QFont.Weight.Bold))
+        self.setFont(build_font(10, QtGui.QFont.Weight.Bold))
         self.setStyleSheet("background-color: transparent;")
         finish_pos_label = HeadingLabel("Position")
         finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
@@ -1477,7 +1515,7 @@ class EventNumberWidget(QtWidgets.QWidget):
         event_layout.setContentsMargins(0, 0, 0, 0)
         event_layout.setSpacing(4)
         self.event_button = QtWidgets.QPushButton(f"{event.event_number}")
-        self.event_button.setFont(QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold))
+        self.event_button.setFont(build_font(16, QtGui.QFont.Weight.Bold))
         self.event_button.setCursor(
             QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         )
@@ -1946,6 +1984,37 @@ class MeetingsTab(QtWidgets.QWidget):
         self.splitter.setOrientation(QtCore.Qt.Orientation.Horizontal)
 
 
+class DeferredMeetingTab(QtWidgets.QWidget):
+    def __init__(self, meeting: Meeting, app_state: AppState):
+        super(DeferredMeetingTab, self).__init__()
+        self.meeting = meeting
+        self.app_state = app_state
+        self._loaded = False
+
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.placeholder = DeferredContentPlaceholder("Loading meeting...")
+        layout.addWidget(self.placeholder)
+        QtCore.QTimer.singleShot(0, self.load_content)
+
+    @QtCore.Slot()
+    def load_content(self):
+        if self._loaded:
+            return
+
+        layout = self.layout()
+        if layout is None:
+            return
+
+        meeting_tab = MeetingsTab(self.meeting, self.app_state)
+        layout.removeWidget(self.placeholder)
+        self.placeholder.deleteLater()
+        layout.addWidget(meeting_tab)
+        self._loaded = True
+
+
 class ScraperTab(QtWidgets.QScrollArea):
     def __init__(self, scraper: MeetingsScraper, app_state: AppState):
         super(ScraperTab, self).__init__()
@@ -1969,7 +2038,7 @@ class ScraperTab(QtWidgets.QScrollArea):
         date_form = QtWidgets.QFormLayout()
         date_widget.setLayout(date_form)
         label = LargeInfoLabel("Date to Scrape")
-        font = QtGui.QFont(FONT, 16, weight=QtGui.QFont.Weight.Bold)
+        font = build_font(16, QtGui.QFont.Weight.Bold)
         font.setUnderline(True)
         label.setFont(font)
 
@@ -2161,7 +2230,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.tab_widget.setCurrentIndex(index)
                 return
         index = self.tab_widget.addTab(
-            MeetingsTab(meeting, self.app_state), meeting.name
+            DeferredMeetingTab(meeting, self.app_state), meeting.name
         )
         self.tab_widget.tabBar().setTabData(index, key)
         self.tab_widget.setCurrentIndex(index)
@@ -2191,6 +2260,9 @@ class MeetingScraperApp(QtWidgets.QApplication):
             SCREEN_SIZE = QtCore.QSize(1600, 900)
         else:
             SCREEN_SIZE = screen.availableGeometry().size()
+        app_font = self.font()
+        app_font.setPointSize(monitor_font_point_size(screen))
+        self.setFont(app_font)
         window = MainWindow(scraper, self.app_state)
         window.setMinimumSize(1100, 720)
         window.showMaximized()
