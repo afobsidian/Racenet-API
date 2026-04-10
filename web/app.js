@@ -3,6 +3,8 @@ const state = {
   selectedMeetingIndex: 0,
   selectedEventIndex: 0,
   analysisMode: "predictor",
+  filterText: "",
+  sortField: "number",
 };
 
 // Keep the stats pane anchored on stable/jockey strike rate while still factoring wet-track profile.
@@ -31,7 +33,11 @@ const refs = {
   insightsPane: document.getElementById("insightsPane"),
   selectionSection: document.getElementById("selectionSection"),
   selectionList: document.getElementById("selectionList"),
+  filterInput: document.getElementById("filterInput"),
+  sortSelect: document.getElementById("sortSelect"),
 };
+
+let countdownInterval = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   refs.dateInput.value = new Date().toISOString().slice(0, 10);
@@ -40,12 +46,74 @@ document.addEventListener("DOMContentLoaded", () => {
     state.analysisMode = event.target.value;
     renderMeeting();
   });
+
+  document.getElementById("prevDateButton").addEventListener("click", () => navigateDate(-1));
+  document.getElementById("nextDateButton").addEventListener("click", () => navigateDate(1));
+
+  refs.filterInput.addEventListener("input", (e) => {
+    state.filterText = e.target.value;
+    const event = currentEvent();
+    refs.selectionList.innerHTML = renderSelections(event);
+    wireInteractiveElements();
+  });
+
+  refs.sortSelect.addEventListener("change", (e) => {
+    state.sortField = e.target.value;
+    const event = currentEvent();
+    refs.selectionList.innerHTML = renderSelections(event);
+    wireInteractiveElements();
+  });
+
+  document.addEventListener("keydown", handleKeyboard);
   loadMeetings();
 });
 
+function navigateDate(offset) {
+  const current = refs.dateInput.value || new Date().toISOString().slice(0, 10);
+  const date = new Date(current + "T12:00:00");
+  date.setDate(date.getDate() + offset);
+  refs.dateInput.value = date.toISOString().slice(0, 10);
+  loadMeetings();
+}
+
+function handleKeyboard(event) {
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target.tagName)) return;
+  const meeting = currentMeeting();
+  const events = meeting ? (Array.isArray(meeting.events) ? meeting.events : []) : [];
+  if (event.key === "ArrowRight") {
+    if (state.selectedEventIndex < events.length - 1) {
+      state.selectedEventIndex++;
+      renderMeeting();
+    }
+  } else if (event.key === "ArrowLeft") {
+    if (state.selectedEventIndex > 0) {
+      state.selectedEventIndex--;
+      renderMeeting();
+    }
+  } else if (event.key === "ArrowDown") {
+    if (state.selectedMeetingIndex < state.meetings.length - 1) {
+      state.selectedMeetingIndex++;
+      state.selectedEventIndex = 0;
+      renderMeetingList();
+      renderMeeting();
+    }
+  } else if (event.key === "ArrowUp") {
+    if (state.selectedMeetingIndex > 0) {
+      state.selectedMeetingIndex--;
+      state.selectedEventIndex = 0;
+      renderMeetingList();
+      renderMeeting();
+    }
+  }
+}
+
 async function loadMeetings() {
-  setStatus("Loading meetings…");
+  setStatus("Loading meetings\u2026");
   refs.loadButton.disabled = true;
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
 
   try {
     const date = refs.dateInput.value || new Date().toISOString().slice(0, 10);
@@ -101,7 +169,7 @@ function renderMeetingList() {
       button.className = `meeting-button${state.selectedMeetingIndex === index ? " active" : ""}`;
       button.innerHTML = `
         <strong>${escapeHtml(meeting.name || "Unknown meeting")}</strong>
-        <span class="subtle">${escapeHtml((meeting.events || []).length)} races · ${escapeHtml(meeting.rail_position || "Rail n/a")}</span>
+        <span class="subtle">${escapeHtml((meeting.events || []).length)} races \xb7 ${escapeHtml(meeting.rail_position || "Rail n/a")}</span>
       `;
       button.addEventListener("click", () => {
         state.selectedMeetingIndex = index;
@@ -112,6 +180,17 @@ function renderMeetingList() {
       refs.meetingList.appendChild(button);
     });
   }
+}
+
+function currentMeeting() {
+  return state.meetings[state.selectedMeetingIndex];
+}
+
+function currentEvent() {
+  const meeting = currentMeeting();
+  if (!meeting) return null;
+  const events = Array.isArray(meeting.events) ? meeting.events : [];
+  return events[state.selectedEventIndex] || events[0] || null;
 }
 
 function renderMeeting() {
@@ -144,7 +223,7 @@ function renderMeeting() {
     <div class="meeting-title">
       <div>
         <h2>${escapeHtml(meeting.name || "Unknown meeting")}</h2>
-        <p class="subtle">${escapeHtml(meeting.state || "Unknown state")} · ${escapeHtml(meeting.slug || "")}</p>
+        <p class="subtle">${escapeHtml(meeting.state || "Unknown state")} \xb7 ${escapeHtml(meeting.slug || "")}</p>
       </div>
       <div class="meeting-meta">
         ${chip("Rail", meeting.rail_position || "n/a")}
@@ -153,7 +232,7 @@ function renderMeeting() {
     </div>
   `;
 
-  refs.eventMeta.textContent = `${event.name || "Race"} · ${event.time || "TBC"}`;
+  refs.eventMeta.textContent = `${event.name || "Race"} \xb7 ${event.time || "TBC"}`;
   refs.eventButtons.innerHTML = events.map((item, index) => `
     <button type="button" class="event-button${index === state.selectedEventIndex ? " active" : ""}" data-index="${index}">
       R${escapeHtml(String(item.event_number || index + 1))}
@@ -166,18 +245,29 @@ function renderMeeting() {
     });
   });
 
+  const firstWinOdds = findOdds((event.selections || [])[0]?.odds, "Win");
+  const mktPct = firstWinOdds?.market_percentage;
+  const mktChip = mktPct
+    ? tonedChip("Market", `${formatFloat(mktPct)}%`, "Win book percentage", mktPct > 120 ? "danger" : mktPct > 110 ? "warning" : "success")
+    : "";
+
   refs.eventDetails.innerHTML = `
     <div class="event-highlight-grid">
-      ${summaryCard("Countdown", formatCountdown(event.time), event.time || "TBC", "primary")}
+      <div class="summary-card tone-primary" title="${escapeHtmlAttribute(event.time || "TBC")}">
+        <span class="summary-label">Countdown</span>
+        <strong><span data-event-time="${escapeHtmlAttribute(event.time || "")}">${escapeHtml(formatCountdown(event.time))}</span></strong>
+        <span class="summary-subtle">${escapeHtml(event.time || "TBC")}</span>
+      </div>
       ${summaryCard("Prize", formatCurrency(event.prize_money), `${formatNumber(event.starters)} runners`, "purple")}
       ${summaryCard("Pace", formatFloat(event.pace), tooltipText(event.comments), "warning")}
-      ${summaryCard("Track", `${event.track_condition || "?"} · ${event.track_type || "?"}`, event.weather || "n/a", "success")}
+      ${summaryCard("Track", `${event.track_condition || "?"} \xb7 ${event.track_type || "?"}`, event.weather || "n/a", "success")}
     </div>
     <div class="chip-row">
       ${tonedChip("Distance", `${formatNumber(event.distance)}m`, "", "primary")}
       ${tonedChip("Class", event._class || "n/a", "", "purple")}
       ${tonedChip("Weather", event.weather || "n/a", "", "success")}
       ${tonedChip("Starters", formatNumber(event.starters), "", "warning")}
+      ${mktChip}
     </div>
   `;
 
@@ -186,6 +276,13 @@ function renderMeeting() {
   refs.insightsPane.innerHTML = renderInsights(event);
   refs.selectionList.innerHTML = renderSelections(event);
   wireInteractiveElements();
+
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    document.querySelectorAll("[data-event-time]").forEach((el) => {
+      el.textContent = formatCountdown(el.dataset.eventTime);
+    });
+  }, 1000);
 }
 
 function renderAnalysis(event) {
@@ -228,8 +325,48 @@ function renderAnalysis(event) {
   );
 }
 
+// ─── Phase 2: filter + sort ───────────────────────────────────────────────────
+
+function sortedFilteredSelections(selections) {
+  let list = [...(selections || [])];
+
+  const q = (state.filterText || "").trim().toLowerCase();
+  if (q) {
+    list = list.filter((s) => (s.name || "").toLowerCase().includes(q));
+  }
+
+  switch (state.sortField) {
+    case "edge":
+      list.sort((a, b) => safeNumber(b.punters_edge) - safeNumber(a.punters_edge));
+      break;
+    case "predictor":
+      list.sort((a, b) => safeNumber(b.predictor_score) - safeNumber(a.predictor_score));
+      break;
+    case "speed":
+      list.sort((a, b) => safeNumber(b.prediction?.speed) - safeNumber(a.prediction?.speed));
+      break;
+    case "odds": {
+      list.sort((a, b) => {
+        const aPrice = safeNumber(findOdds(a.odds, "Win")?.price);
+        const bPrice = safeNumber(findOdds(b.odds, "Win")?.price);
+        if (!aPrice && !bPrice) return 0;
+        if (!aPrice) return 1;
+        if (!bPrice) return -1;
+        return aPrice - bPrice;
+      });
+      break;
+    }
+    default:
+      list.sort((a, b) => safeNumber(a.number) - safeNumber(b.number));
+  }
+
+  return list;
+}
+
 function renderSelections(event) {
-  return (event.selections || []).map((selection, selectionIndex) => {
+  if (!event) return "";
+  const selections = sortedFilteredSelections(event.selections);
+  return selections.map((selection, selectionIndex) => {
     const runs = Array.isArray(selection.runs) ? selection.runs.slice(0, 10) : [];
     const winOdds = findOdds(selection.odds, "Win");
     const placeOdds = findOdds(selection.odds, "Place");
@@ -243,6 +380,14 @@ function renderSelections(event) {
       `Win ${percent(selection.jockey?.last_year_win_percentage)}`,
       `Place ${percent(selection.jockey?.last_year_place_percentage)}`,
     ]);
+    const movLabel = winOdds
+      ? winOdds.movement > 0
+        ? `\u25b2 ${formatFloat(winOdds.movement)}`
+        : winOdds.movement < 0
+          ? `\u25bc ${formatFloat(Math.abs(winOdds.movement))}`
+          : "\u2014 Firm"
+      : "";
+    const winTitle = movLabel ? `Movement: ${movLabel}` : "";
 
     return `
       <details class="selection-card edge-${edgeScore}">
@@ -255,7 +400,7 @@ function renderSelections(event) {
             </div>
           </div>
           <div class="selection-summary-grid">
-            ${tonedChip("Win", formatPrice(winOdds?.price), "", "success")}
+            ${tonedChip("Win", formatPrice(winOdds?.price), winTitle, "success")}
             ${tonedChip("Place", formatPrice(placeOdds?.price), "", "primary")}
             ${tonedChip("Barrier", formatNumber(selection.barrier), "", "warning")}
             ${tonedChip("Weight", formatFloat(selection.weight), "", "purple")}
@@ -279,28 +424,193 @@ function renderSelections(event) {
               ${chip("Gear", selection.gear_changes || "No change", tooltipText(selection.gear_changes || "No gear changes"))}
             </div>
           </div>
-          ${renderTable(
-            ["Date", "Venue", "Pos", "Margin", "Distance", "Cond", "Wt", "L800", "L600", "L400", "L200", "Tempo"],
-            runs.map((run, runIndex) => [
-              run.meeting_date,
-              `${run.venue || run.meeting_name || ""}${run.is_trial ? " (Trial)" : ""}`,
-              formatNumber(run.finish_position),
-              formatFloat(run.margin),
-              `${formatNumber(run.distance)}m`,
-              run.track_condition || "",
-              formatFloat(run.weight),
-              toggleButton(`l800-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l800"), benchmarkDisplay(run, "runner_time_difference_l800", "runner_race_position_l800", "runner_meeting_position_l800")),
-              toggleButton(`l600-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l600"), benchmarkDisplay(run, "runner_time_difference_l600", "runner_race_position_l600", "runner_meeting_position_l600")),
-              toggleButton(`l400-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l400"), benchmarkDisplay(run, "runner_time_difference_l400", "runner_race_position_l400", "runner_meeting_position_l400")),
-              toggleButton(`l200-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l200"), benchmarkDisplay(run, "runner_time_difference_l200", "runner_race_position_l200", "runner_meeting_position_l200")),
-              toggleButton(`tempo-${selectionIndex}-${runIndex}`, run.form_benchmark?.runner_tempo_label || "n/a", formatFloat(run.form_benchmark?.runner_tempo_difference)),
-            ]),
-          )}
+          ${renderPreparationStats(selection)}
+          ${renderPredictorRatings(selection)}
+          ${renderOddsFluctuations(selection)}
+          ${renderRunsTable(runs, selectionIndex)}
         </div>
       </details>
     `;
   }).join("");
 }
+
+// ─── Phase 2: preparation stats ──────────────────────────────────────────────
+
+function renderPreparationStats(selection) {
+  const ps = selection.preparation_stats;
+  if (!ps) return "";
+  const hasData = (
+    safeNumber(ps.first_up_win_percentage) > 0 ||
+    safeNumber(ps.second_up_win_percentage) > 0 ||
+    safeNumber(ps.third_up_win_percentage) > 0 ||
+    safeNumber(ps.nth_up_win_percentage) > 0
+  );
+  if (!hasData) return "";
+
+  return `
+    <div class="detail-subsection">
+      <span class="subsection-label">Preparation Profile</span>
+      <div class="prep-grid">
+        ${renderPrepRow("1st Up", ps.first_up_win_percentage, ps.first_up_average_difference, ps.first_up_stdev_difference)}
+        ${renderPrepRow("2nd Up", ps.second_up_win_percentage, ps.second_up_average_difference, ps.second_up_stdev_difference)}
+        ${renderPrepRow("3rd Up", ps.third_up_win_percentage, ps.third_up_average_difference, ps.third_up_stdev_difference)}
+        ${renderPrepRow("Nth Up", ps.nth_up_win_percentage, ps.nth_up_average_difference, ps.nth_up_stdev_difference)}
+      </div>
+    </div>
+  `;
+}
+
+function renderPrepRow(label, winPct, avgDiff, stdevDiff) {
+  const pct = safeNumber(winPct) * 100;
+  const diff = safeNumber(avgDiff);
+  const stdev = safeNumber(stdevDiff);
+  const tone = pct >= 30 ? "success" : pct >= 10 ? "warning" : "neutral";
+  const diffSign = diff > 0 ? "+" : "";
+  return `
+    <div class="prep-row">
+      <span class="prep-label subtle">${escapeHtml(label)}</span>
+      <span class="chip chip-tone-${tone} prep-win">${escapeHtml(percent(pct))} win</span>
+      <span class="subtle">${escapeHtml(diffSign + formatFloat(diff))}s avg · \xb1${escapeHtml(formatFloat(stdev))}s</span>
+    </div>
+  `;
+}
+
+// ─── Phase 2: predictor ratings breakdown ─────────────────────────────────────
+
+function renderPredictorRatings(selection) {
+  const ratings = selection.predictor_ratings;
+  if (!ratings) return "";
+  const entries = Object.entries(ratings).filter(([, v]) => safeNumber(v) !== 0);
+  if (entries.length === 0) return "";
+
+  const maxVal = Math.max(...entries.map(([, v]) => Math.abs(safeNumber(v))), 0);
+  return `
+    <div class="detail-subsection">
+      <span class="subsection-label">Predictor Components</span>
+      <div class="predictor-ratings">
+        ${entries.map(([key, value]) => {
+          const numVal = safeNumber(value);
+          const width = maxVal > 0 ? Math.max(6, (Math.abs(numVal) / maxVal) * 100) : 6;
+          const label = key.replaceAll("_", "\u00a0");
+          return `
+            <div class="rating-row">
+              <span class="rating-label subtle">${escapeHtml(label)}</span>
+              <span class="meter"><span class="meter-fill tone-purple" style="width:${width}%"></span></span>
+              <span class="rating-value">${escapeHtml(formatFloat(numVal))}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Phase 2: odds price history ──────────────────────────────────────────────
+
+function renderOddsFluctuations(selection) {
+  const winOdds = findOdds(selection.odds, "Win");
+  const placeOdds = findOdds(selection.odds, "Place");
+  const flucts = (winOdds?.fluctuations || []).slice().reverse().slice(0, 12);
+  if (flucts.length < 2) return "";
+
+  const prices = flucts.map((f) => safeNumber(f.price));
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const range = maxPrice - minPrice;
+
+  const movement = safeNumber(winOdds.movement || 0);
+  const movClass = movement > 0 ? "movement-up" : movement < 0 ? "movement-down" : "";
+  const movLabel = movement > 0
+    ? `<span class="movement-up">\u25b2 ${escapeHtml(formatFloat(movement))}</span>`
+    : movement < 0
+      ? `<span class="movement-down">\u25bc ${escapeHtml(formatFloat(Math.abs(movement)))}</span>`
+      : `<span class="muted">\u2014 Firm</span>`;
+
+  return `
+    <div class="detail-subsection">
+      <div class="subsection-label-row">
+        <span class="subsection-label">Price History (Win)</span>
+        ${movLabel}
+        ${placeOdds ? `<span class="muted">Place: ${escapeHtml(formatPrice(placeOdds.price))}</span>` : ""}
+      </div>
+      <div class="fluct-chart">
+        ${flucts.map((f) => {
+          const h = range > 0 ? Math.max(18, Math.min(100, ((maxPrice - safeNumber(f.price)) / range) * 78 + 18)) : 50;
+          const time = (f.time || "").split(" ")[1] || f.time || "";
+          const tone = movClass || "primary";
+          return `<div class="fluct-bar tone-${escapeHtml(tone)}" style="height:${h.toFixed(1)}%" title="${escapeHtmlAttribute(formatPrice(f.price) + " @ " + time)}"><span class="fluct-price">${escapeHtml(formatPrice(f.price))}</span></div>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Phase 2: enhanced form runs table ───────────────────────────────────────
+
+function renderRunsTable(runs, selectionIndex) {
+  if (runs.length === 0) return "";
+  return renderTable(
+    ["Date", "Venue", "Pos", "Price", "Margin", "Dist", "Cond", "Wt", "Rivals", "L800", "L600", "L400", "L200", "Tempo"],
+    runs.map((run, runIndex) => [
+      `<span title="${escapeHtmlAttribute([run.video_comment, run.video_note].filter(Boolean).join("\n"))}" class="run-date-cell">${escapeHtml(run.meeting_date || "")}${run.video_comment ? " \ud83d\udcac" : ""}</span>`,
+      `${escapeHtml(run.venue || run.meeting_name || "")}${run.is_trial ? " <em>(Trial)</em>" : ""}`,
+      positionCell(run),
+      escapeHtml(formatRunPrice(run)),
+      escapeHtml(formatRunMargin(run)),
+      `${escapeHtml(formatNumber(run.distance))}m`,
+      escapeHtml(run.track_condition || ""),
+      escapeHtml(formatFloat(run.weight)),
+      rivalsCell(run),
+      toggleButton(`l800-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l800"), benchmarkDisplay(run, "runner_time_difference_l800", "runner_race_position_l800", "runner_meeting_position_l800")),
+      toggleButton(`l600-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l600"), benchmarkDisplay(run, "runner_time_difference_l600", "runner_race_position_l600", "runner_meeting_position_l600")),
+      toggleButton(`l400-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l400"), benchmarkDisplay(run, "runner_time_difference_l400", "runner_race_position_l400", "runner_meeting_position_l400")),
+      toggleButton(`l200-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l200"), benchmarkDisplay(run, "runner_time_difference_l200", "runner_race_position_l200", "runner_meeting_position_l200")),
+      toggleButton(`tempo-${selectionIndex}-${runIndex}`, run.form_benchmark?.runner_tempo_label || "n/a", formatFloat(run.form_benchmark?.runner_tempo_difference)),
+    ]),
+  );
+}
+
+function positionCell(run) {
+  const pos = formatNumber(run.finish_position);
+  const starters = safeNumber(run.starters);
+  const summaries = Array.isArray(run.position_summaries) ? run.position_summaries : [];
+  const keyPoints = [800, 600, 400].map((dist) => {
+    const ps = summaries.find((s) => s.distance === dist && s.position !== null && s.position !== undefined);
+    return ps ? `${dist}m:\u200b${ps.position}` : null;
+  }).filter(Boolean);
+  const tooltip = keyPoints.length > 0 ? keyPoints.join("  ") : "";
+  const stDesc = starters > 0 ? `/${starters}` : "";
+  return `<span class="pos-cell" title="${escapeHtmlAttribute(tooltip)}">${escapeHtml(pos)}${escapeHtml(stDesc)}${tooltip ? " \u2139" : ""}</span>`;
+}
+
+function formatRunPrice(run) {
+  const open = safeNumber(run.open_price);
+  const fluct = safeNumber(run.fluctuation);
+  const sp = safeNumber(run.starting_price);
+  if (!open && !sp) return "n/a";
+  if (fluct && fluct !== open && fluct !== sp) {
+    return `$${open.toFixed(1)}/$${fluct.toFixed(1)}/$${sp.toFixed(1)}`;
+  }
+  return `$${open.toFixed(1)}/$${sp.toFixed(1)}`;
+}
+
+function formatRunMargin(run) {
+  if (run.margin === null || run.margin === undefined) return "-";
+  const margin = safeNumber(run.margin);
+  if (margin === 0) {
+    const second = safeNumber(run.second_margin);
+    return second > 0 ? `+${second.toFixed(2)}` : "0";
+  }
+  return `${margin.toFixed(2)}`;
+}
+
+function rivalsCell(run) {
+  const val = safeNumber(run.competitors_won_since);
+  if (val === 0) return `<span class="muted">0</span>`;
+  return `<span class="rivals-badge" title="${escapeHtmlAttribute(val + " rivals won since this run")}">${escapeHtml(String(val))}</span>`;
+}
+
+// ─── Interactions ─────────────────────────────────────────────────────────────
 
 function wireInteractiveElements() {
   document.querySelectorAll("[data-toggle-raw]").forEach((button) => {
@@ -343,7 +653,7 @@ function benchmarkDisplay(run, diffKey, raceKey, meetingKey) {
   if (benchmark[meetingKey] !== undefined && benchmark[meetingKey] !== null) {
     parts.push(`M${benchmark[meetingKey]}`);
   }
-  return parts.filter(Boolean).join(" · ") || "n/a";
+  return parts.filter(Boolean).join(" \xb7 ") || "n/a";
 }
 
 function splitDisplay(run, splitKey) {
@@ -366,7 +676,7 @@ function renderTable(headers, rows) {
       </thead>
       <tbody>
         ${rows.map((row) => `
-          <tr>${row.map((cell) => `<td>${cell && String(cell).startsWith("<button") ? cell : escapeHtml(String(cell ?? ""))}</td>`).join("")}</tr>
+          <tr>${row.map((cell) => `<td>${cell && String(cell).startsWith("<") ? cell : escapeHtml(String(cell ?? ""))}</td>`).join("")}</tr>
         `).join("")}
       </tbody>
     </table>
@@ -399,7 +709,7 @@ function renderInsights(event) {
       "Best overlays in the field",
       topSelections(selections, (selection) => selection.punters_edge, 5),
       (selection) => formatFloat(selection.punters_edge),
-      (selection) => `${selection.prediction?.normalized_speed_position || "No speed tag"} · Win ${formatPrice(findOdds(selection.odds, "Win")?.price)}`,
+      (selection) => `${selection.prediction?.normalized_speed_position || "No speed tag"} \xb7 Win ${formatPrice(findOdds(selection.odds, "Win")?.price)}`,
       "warning",
     ),
     renderInsightBlock(
@@ -407,7 +717,7 @@ function renderInsights(event) {
       "Model score leaders",
       topSelections(selections, (selection) => selection.predictor_score, 5),
       (selection) => formatFloat(selection.predictor_score),
-      (selection) => `Rank ${formatNumber(selection.prediction?.model_rank)} · Chance ${percent(selection.prediction?.winning_chance)}`,
+      (selection) => `Rank ${formatNumber(selection.prediction?.model_rank)} \xb7 Chance ${percent(selection.prediction?.winning_chance)}`,
       "purple",
     ),
     renderInsightBlock(
@@ -422,8 +732,8 @@ function renderInsights(event) {
       "Stats",
       "Trainer / jockey and wet profile",
       topSelections(selections, calculateInsightStatsScore, 5),
-      (selection) => `${percent(selection.trainer_jockey_win_percentage)} · ${percent(selection.wet_runs_win_percentage)}`,
-      (selection) => `Wet place ${percent(selection.wet_runs_place_percentage)} · Avg prize ${formatCurrency(selection.average_prize_money)}`,
+      (selection) => `${percent(selection.trainer_jockey_win_percentage)} \xb7 ${percent(selection.wet_runs_win_percentage)}`,
+      (selection) => `Wet place ${percent(selection.wet_runs_place_percentage)} \xb7 Avg prize ${formatCurrency(selection.average_prize_money)}`,
       "success",
     ),
   ].join("");
@@ -499,10 +809,6 @@ function percentageTone(value) {
   return "neutral";
 }
 
-function currentMeeting() {
-  return state.meetings[state.selectedMeetingIndex];
-}
-
 function findOdds(odds, type) {
   return (odds || []).find((entry) => entry.bet_type === type);
 }
@@ -572,7 +878,7 @@ function percent(value) {
 
 function truncate(value) {
   const text = String(value || "");
-  return text.length > 96 ? `${text.slice(0, 93)}…` : text;
+  return text.length > 96 ? `${text.slice(0, 93)}\u2026` : text;
 }
 
 function tooltipText(primary, extras = []) {

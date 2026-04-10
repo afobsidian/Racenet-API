@@ -22,7 +22,11 @@
       <section class="toolbar card">
         <label>
           <span>Date</span>
-          <input id="dateInput" type="date" />
+          <div class="date-nav-group">
+            <button id="prevDateButton" type="button" class="nav-button" title="Previous day">‹</button>
+            <input id="dateInput" type="date" />
+            <button id="nextDateButton" type="button" class="nav-button" title="Next day">›</button>
+          </div>
         </label>
         <label class="checkbox">
           <input id="localToggle" type="checkbox" checked />
@@ -85,7 +89,17 @@
         <section id="selectionSection" class="card section hidden">
           <div class="section-heading">
             <h2>Selections</h2>
-            <span class="muted">Left click to expand, right click to copy</span>
+            <div class="selection-controls">
+              <input id="filterInput" type="search" placeholder="Filter by name…" />
+              <select id="sortSelect">
+                <option value="number">Sort: Number</option>
+                <option value="edge">Sort: Edge</option>
+                <option value="predictor">Sort: Predictor</option>
+                <option value="speed">Sort: Speed</option>
+                <option value="odds">Sort: Win Odds</option>
+              </select>
+              <span class="muted">Left click to expand · Right click to copy · ← → events · ↑ ↓ meetings</span>
+            </div>
           </div>
           <div id="selectionList" class="selection-list"></div>
         </section>
