@@ -5,9 +5,12 @@ const state = {
   analysisMode: "predictor",
 };
 
-const TRAINER_JOCKEY_STATS_WEIGHT = 2;
-const WET_PLACE_STATS_WEIGHT = 1;
-const TOTAL_STATS_WEIGHT = TRAINER_JOCKEY_STATS_WEIGHT + WET_PLACE_STATS_WEIGHT;
+// Keep the stats pane anchored on stable/jockey strike rate while still factoring wet-track profile.
+const STATS_INSIGHT_WEIGHTS = Object.freeze({
+  trainerJockeyWin: 2,
+  wetPlaceProfile: 1,
+});
+const TOTAL_STATS_INSIGHT_WEIGHT = STATS_INSIGHT_WEIGHTS.trainerJockeyWin + STATS_INSIGHT_WEIGHTS.wetPlaceProfile;
 
 const refs = {
   dateInput: document.getElementById("dateInput"),
@@ -418,7 +421,7 @@ function renderInsights(event) {
     renderInsightBlock(
       "Stats",
       "Trainer / jockey and wet profile",
-      topSelections(selections, weightedStatsValue, 5),
+      topSelections(selections, calculateInsightStatsScore, 5),
       (selection) => `${percent(selection.trainer_jockey_win_percentage)} · ${percent(selection.wet_runs_win_percentage)}`,
       (selection) => `Wet place ${percent(selection.wet_runs_place_percentage)} · Avg prize ${formatCurrency(selection.average_prize_money)}`,
       "success",
@@ -469,18 +472,18 @@ function topSelections(selections, selector, limit) {
     .slice(0, limit);
 }
 
-function weightedStatsValue(selection) {
+function calculateInsightStatsScore(selection) {
   return (
-    (safeNumber(selection.trainer_jockey_win_percentage) * TRAINER_JOCKEY_STATS_WEIGHT) +
-    (safeNumber(selection.wet_runs_place_percentage) * WET_PLACE_STATS_WEIGHT)
-  ) / TOTAL_STATS_WEIGHT;
+    (safeNumber(selection.trainer_jockey_win_percentage) * STATS_INSIGHT_WEIGHTS.trainerJockeyWin) +
+    (safeNumber(selection.wet_runs_place_percentage) * STATS_INSIGHT_WEIGHTS.wetPlaceProfile)
+  ) / TOTAL_STATS_INSIGHT_WEIGHT;
 }
 
 function numericInsightValue(selection, title) {
   if (title === "Punters Edge") return safeNumber(selection.punters_edge);
   if (title === "Predictor") return safeNumber(selection.predictor_score);
   if (title === "Speed") return safeNumber(selection.prediction?.speed);
-  return weightedStatsValue(selection);
+  return calculateInsightStatsScore(selection);
 }
 
 function safeNumber(value) {
