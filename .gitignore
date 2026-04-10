@@ -129,6 +129,7 @@ ENV/
 env.bak/
 venv.bak/
 .venv
+/racenet-api
 
 # Spyder project settings
 .spyderproject

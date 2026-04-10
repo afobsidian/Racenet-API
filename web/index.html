@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Racenet Web</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Go web migration</p>
+          <h1>Racenet Web</h1>
+        </div>
+        <div class="status-cluster">
+          <span id="sourceBadge" class="badge">cache</span>
+          <span id="statusText" class="status-text">Ready</span>
+        </div>
+      </header>
+
+      <section class="toolbar card">
+        <label>
+          <span>Date</span>
+          <input id="dateInput" type="date" />
+        </label>
+        <label class="checkbox">
+          <input id="localToggle" type="checkbox" checked />
+          <span>Use local data</span>
+        </label>
+        <button id="loadButton" type="button">Extract</button>
+      </section>
+
+      <main class="layout">
+        <aside class="sidebar card">
+          <div class="section-heading">
+            <h2>Meetings</h2>
+            <span id="meetingCount" class="muted">0 loaded</span>
+          </div>
+          <div id="meetingList" class="meeting-list"></div>
+        </aside>
+
+        <section class="content">
+          <div id="emptyState" class="empty card">
+            Load meetings to browse races, analysis, tooltips, and selection details.
+          </div>
+
+          <div id="meetingView" class="meeting-view hidden">
+            <section class="card section">
+              <div id="meetingHeader"></div>
+            </section>
+
+            <section class="card section">
+              <div class="section-heading">
+                <h2>Events</h2>
+                <span id="eventMeta" class="muted"></span>
+              </div>
+              <div id="eventButtons" class="event-buttons"></div>
+              <div id="eventDetails" class="event-details"></div>
+            </section>
+
+            <section class="card section">
+              <div class="section-heading">
+                <h2>Analysis</h2>
+                <select id="analysisSelect">
+                  <option value="predictor">Predictor</option>
+                  <option value="speed">Speed</option>
+                  <option value="stats">Stats</option>
+                </select>
+              </div>
+              <div id="analysisBody"></div>
+            </section>
+
+            <section class="card section">
+              <div class="section-heading">
+                <h2>Selections</h2>
+                <span class="muted">Left click to expand, right click to copy</span>
+              </div>
+              <div id="selectionList" class="selection-list"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>

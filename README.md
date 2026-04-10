@@ -1,5 +1,25 @@
 # Horse Racing Racenet API scraper
 
+## Go Web Interface (Phase 1)
+
+The repository now also includes a Go web application that renders the existing
+meeting data in a dark web UI and keeps the current Racenet-backed scraper as
+the live data source.
+
+Run it from the repository root with:
+
+```bash
+go run .
+```
+
+Then open `http://localhost:8080`.
+
+- `Use local data` reads `meetings_cache.json`.
+- Clearing `Use local data` triggers a live fetch through the existing Python
+  scraper modules, then updates `meetings_cache.json`.
+- The web UI currently focuses on the meeting browser, race analysis, tooltips,
+  and expandable selection details as the first migration phase.
+
 ## Install
 
 To create virtual env to run, navigate to directory containing "requirements.txt" and perform the following:
