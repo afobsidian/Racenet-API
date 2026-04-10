@@ -29,9 +29,10 @@ from cache_utils import save_meetings_cache
 from scraper import MeetingsScraper
 
 
+request = json.load(sys.stdin)
 scraper = MeetingsScraper()
-scrape_date = datetime.strptime(sys.argv[1], "%Y-%m-%d")
-cache_path = sys.argv[2]
+scrape_date = datetime.strptime(request["date"], "%Y-%m-%d")
+cache_path = request["cache_path"]
 meetings = scraper.get_meetings(scrape_date)
 save_meetings_cache(cache_path, meetings)
 print(json.dumps([asdict(meeting) for meeting in meetings]))
@@ -188,8 +189,17 @@ func (app *application) fetchLiveMeetings(parent context.Context, dateText strin
 	defer cancel()
 
 	cachePath := filepath.Join(app.repoRoot, "meetings_cache.json")
-	cmd := exec.CommandContext(ctx, "python", "-c", liveFetchScript, dateText, cachePath)
+	requestPayload, err := json.Marshal(map[string]string{
+		"date":       dateText,
+		"cache_path": cachePath,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, "python", "-c", liveFetchScript)
 	cmd.Dir = app.repoRoot
+	cmd.Stdin = strings.NewReader(string(requestPayload))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		trimmed := strings.TrimSpace(string(output))
