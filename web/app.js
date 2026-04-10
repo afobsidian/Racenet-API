@@ -325,6 +325,93 @@ function renderAnalysis(event) {
   );
 }
 
+// ─── Phase 3 helpers ─────────────────────────────────────────────────────────
+
+// Ordinal suffix: 1st, 2nd, 3rd, 4th…
+function ordinalSuffix(n) {
+  const abs = Math.abs(n);
+  const mod100 = abs % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (abs % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+// Preparation score (0-3) based on Python parity thresholds:
+//   +1 if win% >= 33%, +1 if avg diff <= -1s, +1 if stdev != 0 and <= 0.5s
+function prepScore(winPct, avgDiff, stdev) {
+  let score = 0;
+  if (safeNumber(winPct) >= 0.33) score++;
+  if (safeNumber(avgDiff) <= -1) score++;
+  const sd = safeNumber(stdev);
+  if (sd > 0 && sd <= 0.5) score++;
+  return score;
+}
+
+// Color tone for prep score (matches accent_from_score in gui.py)
+function prepScoreTone(score) {
+  if (score >= 3) return "purple";
+  if (score >= 2) return "danger";
+  if (score >= 1) return "warning";
+  return "neutral";
+}
+
+// Pick the correct preparation_stats row for runs_since_spell
+function currentPrepStats(selection) {
+  const ps = selection.preparation_stats;
+  if (!ps) return null;
+  const n = safeNumber(selection.runs_since_spell);
+  if (n === 0) return { winPct: ps.first_up_win_percentage, avgDiff: ps.first_up_average_difference, stdev: ps.first_up_stdev_difference };
+  if (n === 1) return { winPct: ps.second_up_win_percentage, avgDiff: ps.second_up_average_difference, stdev: ps.second_up_stdev_difference };
+  if (n === 2) return { winPct: ps.third_up_win_percentage, avgDiff: ps.third_up_average_difference, stdev: ps.third_up_stdev_difference };
+  return { winPct: ps.nth_up_win_percentage, avgDiff: ps.nth_up_average_difference, stdev: ps.nth_up_stdev_difference };
+}
+
+// Color tone for trainer/jockey: orange=1 signal, red/danger=2 signals
+function trainerTone(selection) {
+  let score = 0;
+  if (safeNumber(selection.trainer?.last_year_win_percentage) >= 0.18) score++;
+  if (safeNumber(selection.trainer_jockey_win_percentage) >= 20) score++;
+  return score >= 2 ? "danger" : score >= 1 ? "warning" : "";
+}
+
+function jockeyTone(selection) {
+  let score = 0;
+  if (safeNumber(selection.jockey?.last_year_win_percentage) >= 0.14) score++;
+  if (safeNumber(selection.trainer_jockey_win_percentage) >= 20) score++;
+  return score >= 2 ? "danger" : score >= 1 ? "warning" : "";
+}
+
+// Color tone for run weight vs selection current weight
+function weightRunTone(runWeight, selectionWeight) {
+  const diff = safeNumber(runWeight) - safeNumber(selectionWeight);
+  if (diff >= 6) return "purple";
+  if (diff >= 4) return "danger";
+  if (diff >= 2) return "warning";
+  return "";
+}
+
+// Format finish_time / winner_time from seconds float or "mm:ss.xxx" string
+function formatRunTime(value) {
+  if (!value) return "n/a";
+  const num = Number(value);
+  if (Number.isFinite(num) && num > 0) {
+    const minutes = Math.floor(num / 60);
+    const seconds = num % 60;
+    return minutes > 0 ? `${minutes}:${seconds.toFixed(2).padStart(5, "0")}` : seconds.toFixed(2);
+  }
+  // string like "01:25.720" — trim leading "0" minute if present
+  const str = String(value);
+  if (str === "0" || str === "0.0" || str === "None") return "n/a";
+  // strip trailing chars and leading 0-minute
+  const clean = str.replace(/[^\d:.]/g, "");
+  if (clean.startsWith("0:")) return clean.slice(2);
+  return clean || "n/a";
+}
+
 // ─── Phase 2: filter + sort ───────────────────────────────────────────────────
 
 function sortedFilteredSelections(selections) {
@@ -371,15 +458,46 @@ function renderSelections(event) {
     const winOdds = findOdds(selection.odds, "Win");
     const placeOdds = findOdds(selection.odds, "Place");
     const edgeScore = scoreClass(selection.punters_edge);
+
+    // ─ Phase 3: prep scoring
+    const cps = currentPrepStats(selection);
+    const pScore = cps ? prepScore(cps.winPct, cps.avgDiff, cps.stdev) : 0;
+    const prepTone = prepScoreTone(pScore);
+    const prepLabel = ordinalSuffix(safeNumber(selection.runs_since_spell) + 1) + " up";
+    const prepTitle = cps
+      ? tooltipText(null, [
+          `Win ${percent(safeNumber(cps.winPct) * 100)}`,
+          `Avg diff ${formatFloat(cps.avgDiff)}s`,
+          `Stdev \xb1${formatFloat(cps.stdev)}s`,
+        ])
+      : "";
+
+    // ─ Phase 3: weight string with claim
+    const claim = safeNumber(selection.claim);
+    const weightStr = claim !== 0
+      ? `${formatFloat(selection.weight)}kg (a${formatFloat(claim)})`
+      : `${formatFloat(selection.weight)}kg`;
+
+    // ─ Phase 3: freshness
+    const daysSince = safeNumber(selection.days_since_last);
+    const freshnessText = daysSince > 0 ? `${daysSince}d` : "Unraced";
+    const freshTone = daysSince > 180 ? "warning" : "neutral";
+
+    // ─ Phase 3: trainer/jockey colour signals
+    const trTone = trainerTone(selection);
+    const jkTone = jockeyTone(selection);
     const trainerTitle = tooltipText(selection.trainer?.name, [
-      `Win ${percent(selection.trainer?.last_year_win_percentage)}`,
-      `Place ${percent(selection.trainer?.last_year_place_percentage)}`,
+      `Win ${percent(safeNumber(selection.trainer?.last_year_win_percentage) * 100)}`,
+      `Place ${percent(safeNumber(selection.trainer?.last_year_place_percentage) * 100)}`,
       selection.trainer?.location,
     ]);
     const jockeyTitle = tooltipText(selection.jockey?.name, [
-      `Win ${percent(selection.jockey?.last_year_win_percentage)}`,
-      `Place ${percent(selection.jockey?.last_year_place_percentage)}`,
+      `Win ${percent(safeNumber(selection.jockey?.last_year_win_percentage) * 100)}`,
+      `Place ${percent(safeNumber(selection.jockey?.last_year_place_percentage) * 100)}`,
     ]);
+    const tjPct = safeNumber(selection.trainer_jockey_win_percentage);
+    const tjTone = tjPct >= 20 ? "danger" : tjPct >= 12 ? "warning" : "neutral";
+
     const movLabel = winOdds
       ? winOdds.movement > 0
         ? `\u25b2 ${formatFloat(winOdds.movement)}`
@@ -403,31 +521,32 @@ function renderSelections(event) {
             ${tonedChip("Win", formatPrice(winOdds?.price), winTitle, "success")}
             ${tonedChip("Place", formatPrice(placeOdds?.price), "", "primary")}
             ${tonedChip("Barrier", formatNumber(selection.barrier), "", "warning")}
-            ${tonedChip("Weight", formatFloat(selection.weight), "", "purple")}
+            ${tonedChip("Wt", weightStr, "", "purple")}
             ${tonedChip("ROI", percent(selection.roi), "", percentageTone(selection.roi))}
-            ${tonedChip("Prep", formatNumber(selection.runs_since_spell), "", "primary")}
+            ${tonedChip("Prep", prepLabel, prepTitle, prepTone)}
+            ${tonedChip("Fresh", freshnessText, "", freshTone)}
             ${chip("Edge", formatFloat(selection.punters_edge), "", edgeScore)}
           </div>
         </summary>
         <div class="selection-body">
           <div class="detail-grid">
             <div class="stack">
-              ${chip("Trainer", selection.trainer?.name || "n/a", trainerTitle)}
-              ${chip("Jockey", selection.jockey?.name || "n/a", jockeyTitle)}
-              ${chip("Train/Jock", percent(selection.trainer_jockey_win_percentage))}
+              ${coloredChip("Trainer", selection.trainer?.name || "n/a", trainerTitle, trTone)}
+              ${coloredChip("Jockey", selection.jockey?.name || "n/a", jockeyTitle, jkTone)}
+              ${tonedChip("T/J Win", percent(tjPct), "Trainer-jockey combo win %", tjTone)}
               ${chip("Comments", truncate(selection.comments || "No comments"), tooltipText(selection.comments, selection.external_comments ? Object.entries(selection.external_comments).map(([brand, value]) => `${brand}: ${value}`) : []))}
             </div>
             <div class="stack">
               ${chip("Record", `${formatNumber(selection.total_wins)}W / ${formatNumber(selection.total_places)}P / ${formatNumber(selection.total_runs)}R`)}
               ${chip("Wet", `${percent(selection.wet_runs_win_percentage)} / ${percent(selection.wet_runs_place_percentage)}`)}
               ${chip("Avg Prize", formatCurrency(selection.average_prize_money))}
-              ${chip("Gear", selection.gear_changes || "No change", tooltipText(selection.gear_changes || "No gear changes"))}
+              ${chip("Gear", selection.gear_changes ? "Updated" : "No change", tooltipText(selection.gear_changes || "No gear changes"))}
             </div>
           </div>
           ${renderPreparationStats(selection)}
           ${renderPredictorRatings(selection)}
           ${renderOddsFluctuations(selection)}
-          ${renderRunsTable(runs, selectionIndex)}
+          ${renderRunsTable(runs, selectionIndex, selection)}
         </div>
       </details>
     `;
@@ -545,29 +664,89 @@ function renderOddsFluctuations(selection) {
   `;
 }
 
-// ─── Phase 2: enhanced form runs table ───────────────────────────────────────
+// ─── Phase 3: enhanced form runs table with full parity ──────────────────────
 
-function renderRunsTable(runs, selectionIndex) {
+function renderRunsTable(runs, selectionIndex, selection) {
   if (runs.length === 0) return "";
-  return renderTable(
-    ["Date", "Venue", "Pos", "Price", "Margin", "Dist", "Cond", "Wt", "Rivals", "L800", "L600", "L400", "L200", "Tempo"],
-    runs.map((run, runIndex) => [
-      `<span title="${escapeHtmlAttribute([run.video_comment, run.video_note].filter(Boolean).join("\n"))}" class="run-date-cell">${escapeHtml(run.meeting_date || "")}${run.video_comment ? " \ud83d\udcac" : ""}</span>`,
-      `${escapeHtml(run.venue || run.meeting_name || "")}${run.is_trial ? " <em>(Trial)</em>" : ""}`,
-      positionCell(run),
-      escapeHtml(formatRunPrice(run)),
-      escapeHtml(formatRunMargin(run)),
-      `${escapeHtml(formatNumber(run.distance))}m`,
-      escapeHtml(run.track_condition || ""),
-      escapeHtml(formatFloat(run.weight)),
-      rivalsCell(run),
-      toggleButton(`l800-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l800"), benchmarkDisplay(run, "runner_time_difference_l800", "runner_race_position_l800", "runner_meeting_position_l800")),
-      toggleButton(`l600-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l600"), benchmarkDisplay(run, "runner_time_difference_l600", "runner_race_position_l600", "runner_meeting_position_l600")),
-      toggleButton(`l400-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l400"), benchmarkDisplay(run, "runner_time_difference_l400", "runner_race_position_l400", "runner_meeting_position_l400")),
-      toggleButton(`l200-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l200"), benchmarkDisplay(run, "runner_time_difference_l200", "runner_race_position_l200", "runner_meeting_position_l200")),
-      toggleButton(`tempo-${selectionIndex}-${runIndex}`, run.form_benchmark?.runner_tempo_label || "n/a", formatFloat(run.form_benchmark?.runner_tempo_difference)),
-    ]),
-  );
+
+  const selWeight = safeNumber(selection?.weight);
+  const headers = ["Date", "Venue", "Pos", "Jockey", "Wt", "Price", "Margin", "Days", "Dist", "Cond", "Class", "L800", "L600", "L400", "L200", "R Time", "W Time", "Tempo", "W Tempo"];
+
+  const rows = [];
+  for (let runIndex = 0; runIndex < runs.length; runIndex++) {
+    const run = runs[runIndex];
+
+    // Spell separator: if there are >= 60 days since last start, insert a divider row
+    if (runIndex > 0 && safeNumber(run.days_since_last) >= 60) {
+      rows.push(`<tr class="spell-row"><td colspan="${headers.length}"><span class="spell-label">Spell · ${escapeHtml(String(run.days_since_last))} days</span></td></tr>`);
+    }
+
+    const wTone = run.is_trial ? "" : weightRunTone(run.weight, selWeight);
+    const wCell = run.is_trial
+      ? `<span class="muted">trial</span>`
+      : `<span class="${wTone ? `run-weight-${escapeHtml(wTone)}` : ""}">${escapeHtml(formatFloat(run.weight))}</span>`;
+
+    const classCell = run._class
+      ? `<span class="${run.is_class ? "run-class-highlight" : ""}">${escapeHtml(run._class)}</span>`
+      : `<span class="muted">—</span>`;
+
+    const jockeyCell = run.jockey?.name
+      ? `<span>${escapeHtml(run.jockey.name)}</span>`
+      : `<span class="muted">—</span>`;
+
+    const daysCell = safeNumber(run.days_since_last) > 0
+      ? `<span>${escapeHtml(String(run.days_since_last))}d</span>`
+      : `<span class="muted">—</span>`;
+
+    const rTimeCell = safeNumber(run.finish_time) > 0
+      ? toggleButton(`rtime-${selectionIndex}-${runIndex}`, formatRunTime(run.finish_time), formatFloat(run.form_benchmark?.runner_time_difference))
+      : `<span class="muted">—</span>`;
+
+    const wTimeCell = run.winner_time
+      ? toggleButton(`wtime-${selectionIndex}-${runIndex}`, formatRunTime(run.winner_time), formatFloat(run.form_benchmark?.winner_time_difference))
+      : `<span class="muted">—</span>`;
+
+    const wTempoCell = toggleButton(
+      `wtempo-${selectionIndex}-${runIndex}`,
+      run.form_benchmark?.leader_tempo_label || "n/a",
+      formatFloat(run.form_benchmark?.leader_tempo_difference),
+    );
+
+    rows.push(`
+      <tr class="${run.is_trial ? "trial-run" : ""}">
+        <td><span title="${escapeHtmlAttribute([run.video_comment, run.video_note].filter(Boolean).join("\n"))}" class="run-date-cell">${escapeHtml(run.meeting_date || "")}${run.video_comment ? " \ud83d\udcac" : ""}</span></td>
+        <td>${escapeHtml(run.venue || run.meeting_name || "")}</td>
+        <td>${positionCell(run)}</td>
+        <td>${jockeyCell}</td>
+        <td>${wCell}</td>
+        <td>${escapeHtml(run.is_trial ? "—" : formatRunPrice(run))}</td>
+        <td>${escapeHtml(run.is_trial ? "—" : formatRunMargin(run))}</td>
+        <td>${daysCell}</td>
+        <td>${escapeHtml(formatNumber(run.distance))}m</td>
+        <td>${escapeHtml(run.track_condition || "")}</td>
+        <td>${classCell}</td>
+        <td>${toggleButton(`l800-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l800"), benchmarkDisplay(run, "runner_time_difference_l800", "runner_race_position_l800", "runner_meeting_position_l800"))}</td>
+        <td>${toggleButton(`l600-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l600"), benchmarkDisplay(run, "runner_time_difference_l600", "runner_race_position_l600", "runner_meeting_position_l600"))}</td>
+        <td>${toggleButton(`l400-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l400"), benchmarkDisplay(run, "runner_time_difference_l400", "runner_race_position_l400", "runner_meeting_position_l400"))}</td>
+        <td>${toggleButton(`l200-${selectionIndex}-${runIndex}`, splitDisplay(run, "runner_split_l200"), benchmarkDisplay(run, "runner_time_difference_l200", "runner_race_position_l200", "runner_meeting_position_l200"))}</td>
+        <td>${rTimeCell}</td>
+        <td>${wTimeCell}</td>
+        <td>${toggleButton(`tempo-${selectionIndex}-${runIndex}`, run.form_benchmark?.runner_tempo_label || "n/a", formatFloat(run.form_benchmark?.runner_tempo_difference))}</td>
+        <td>${wTempoCell}</td>
+      </tr>
+    `);
+  }
+
+  return `
+    <div class="runs-scroll">
+      <table class="tabular">
+        <thead>
+          <tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function positionCell(run) {
@@ -578,9 +757,20 @@ function positionCell(run) {
     const ps = summaries.find((s) => s.distance === dist && s.position !== null && s.position !== undefined);
     return ps ? `${dist}m: ${ps.position}` : null;
   }).filter(Boolean);
-  const tooltip = keyPoints.length > 0 ? keyPoints.join("  ") : "";
+
+  // Phase 3: winner podium info in tooltip (matches gui.py RunsWidget finish_pos_label tooltip)
+  const podium = [];
+  if (run.winner_name) podium.push(`1st: ${run.winner_name}`);
+  if (run.second_name) podium.push(`2nd: ${run.second_name}`);
+  if (run.third_name) podium.push(`3rd: ${run.third_name}`);
+  const rivals = safeNumber(run.competitors_won_since);
+  if (rivals > 0) podium.push(`${rivals} rivals won since`);
+
+  const allTips = [...podium, ...(keyPoints.length > 0 ? ["", ...keyPoints] : [])];
+  const tooltip = allTips.join("\n");
   const stDesc = starters > 0 ? `/${starters}` : "";
-  return `<span class="pos-cell" title="${escapeHtmlAttribute(tooltip)}">${escapeHtml(pos)}${escapeHtml(stDesc)}${tooltip ? " \u2139" : ""}</span>`;
+  const hasTip = podium.length > 0 || keyPoints.length > 0;
+  return `<span class="pos-cell" title="${escapeHtmlAttribute(tooltip)}">${escapeHtml(pos)}${escapeHtml(stDesc)}${hasTip ? " \u2139" : ""}</span>`;
 }
 
 function formatRunPrice(run) {
@@ -689,6 +879,12 @@ function chip(label, value, title = "", score = 0) {
 
 function tonedChip(label, value, title = "", tone = "") {
   return `<span class="chip chip-tone-${escapeHtml(tone || "neutral")}" title="${escapeHtmlAttribute(title)}"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value ?? "n/a"))}</span>`;
+}
+
+// coloredChip: like chip but uses a signal-tone text colour (warning/danger) for emphasis
+function coloredChip(label, value, title = "", tone = "") {
+  const cls = tone ? ` chip-signal-${escapeHtml(tone)}` : "";
+  return `<span class="chip${cls}" title="${escapeHtmlAttribute(title)}"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value ?? "n/a"))}</span>`;
 }
 
 function summaryCard(label, value, subtitle = "", tone = "primary") {

@@ -1,5 +1,0 @@
-requests
-types-requests
-pyside6
-qdarkstyle
-numerize

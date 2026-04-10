@@ -699,6 +699,60 @@ p {
   cursor: help;
 }
 
+/* ─── Phase 3 additions ──────────────────────────────────────────────────── */
+
+/* Scrollable runs table container — keeps card width fixed */
+.runs-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Trial run rows are dimmed */
+tr.trial-run td {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Spell separator row */
+tr.spell-row td {
+  padding: 6px 12px;
+  text-align: center;
+  border-bottom: 1px solid rgba(150, 170, 220, 0.12);
+}
+
+.spell-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  opacity: 0.72;
+}
+
+.spell-label::before,
+.spell-label::after {
+  content: "";
+  display: block;
+  height: 1px;
+  width: 40px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+/* Run weight change color coding */
+.run-weight-warning { color: var(--warning); font-weight: 700; }
+.run-weight-danger { color: var(--danger); font-weight: 700; }
+.run-weight-purple { color: var(--purple); font-weight: 700; }
+
+/* Class run highlight (LR / Group / Listed race) */
+.run-class-highlight { color: #f0e040; font-weight: 700; }
+
+/* Colored chip signal tones (trainer/jockey) */
+.chip-signal-warning { color: var(--warning); }
+.chip-signal-danger { color: var(--danger); }
+
 @media (max-width: 1180px) {
   .top-grid,
   .overview-grid {
