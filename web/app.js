@@ -576,7 +576,7 @@ function positionCell(run) {
   const summaries = Array.isArray(run.position_summaries) ? run.position_summaries : [];
   const keyPoints = [800, 600, 400].map((dist) => {
     const ps = summaries.find((s) => s.distance === dist && s.position !== null && s.position !== undefined);
-    return ps ? `${dist}m:\u200b${ps.position}` : null;
+    return ps ? `${dist}m: ${ps.position}` : null;
   }).filter(Boolean);
   const tooltip = keyPoints.length > 0 ? keyPoints.join("  ") : "";
   const stDesc = starters > 0 ? `/${starters}` : "";
