@@ -1025,6 +1025,7 @@ class Selection:
     preparation_stats: PreparationStats
     predictor_ratings: PredictorRatings = field(default_factory=PredictorRatings)
     predictor_score: float = 0.0
+    career_record: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "Selection":
@@ -1051,6 +1052,7 @@ class Selection:
                 total_runs=0,
                 total_wins=0,
                 total_places=0,
+                career_record="",
                 average_prize_money=0.0,
                 wet_runs_win_percentage=0.0,
                 wet_runs_place_percentage=0.0,
@@ -1116,6 +1118,7 @@ class Selection:
             total_runs=0,
             total_wins=0,
             total_places=0,
+            career_record=data.get("career", "") or "",
             average_prize_money=0.0,
             wet_runs_win_percentage=0.0,
             wet_runs_place_percentage=0.0,
@@ -1153,13 +1156,31 @@ class Selection:
                 self.runs_since_spell = len(non_trial_runs)
                 break
 
+    def inferred_record(self) -> tuple[int, int, int]:
+        non_trial_runs = [run for run in self.runs if not run.is_trial]
+        wins = sum(1 for run in non_trial_runs if run.finish_position == 1)
+        places = sum(1 for run in non_trial_runs if run.finish_position in (2, 3))
+        return len(non_trial_runs), wins, places
+
+    def record(self) -> tuple[int, int, int]:
+        if self.total_runs or self.total_wins or self.total_places:
+            return self.total_runs, self.total_wins, self.total_places
+        return self.inferred_record()
+
+    def record_text(self) -> str:
+        if self.career_record:
+            return self.career_record
+        total_runs, total_wins, total_places = self.record()
+        return f"{total_runs}:{total_wins}-{total_places}"
+
     def add_stats(self, stats: dict):
         self.trainer_jockey_win_percentage = stats.get("trainerJockeyWin", 0.0)
-        self.total_runs = stats.get("totalRuns", 0)
+        self.career_record = stats.get("career", "") or self.career_record
+        self.total_runs = int(stats.get("totalRuns", 0) or 0)
         total_places = stats.get("totalPlaces", [])
         if len(total_places) == 3:
-            self.total_wins = total_places[0]
-            self.total_places = total_places[1] + total_places[2]
+            self.total_wins = int(total_places[0] or 0)
+            self.total_places = int(total_places[1] or 0) + int(total_places[2] or 0)
 
         self.place_percentage = stats.get("placePercentage", 0.0)
         self.average_prize_money = stats.get("averagePrizeMoney", 0.0)

@@ -253,7 +253,7 @@ class MeetingsScraper:
                 continue
             for selection in meeting.events[index].selections:
                 for stats in stats_data:
-                    if selection.id == stats.get("selectionId"):
+                    if selection.id == str(stats.get("selectionId", "")):
                         selection.add_stats(stats)
 
             odds_query = self.create_odds_query(str(event.event_id))

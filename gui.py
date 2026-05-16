@@ -373,6 +373,72 @@ class DetailChip(QtWidgets.QFrame):
         self.setToolTip(tooltip)
 
 
+RUN_COLUMNS: list[tuple[str, str, float]] = [
+    ("finish", "Position", 0.03),
+    ("margin", "Mar.", 0.021),
+    ("venue", "Venue", 0.06),
+    ("date", "Date", 0.04),
+    ("distance", "Dist.", 0.028),
+    ("condition", "Condition", 0.035),
+    ("weight", "Weight", 0.026),
+    ("jockey", "Jockey", 0.063),
+    ("odds", "Odds", 0.051),
+    ("class", "Class", 0.076),
+    ("between", "Between", 0.035),
+    ("l800", "L800", 0.035),
+    ("l600", "L600", 0.035),
+    ("l400", "L400", 0.035),
+    ("l200", "L200", 0.025),
+    ("runner_time", "R Time", 0.04),
+    ("winner_time", "W Time", 0.03),
+    ("runner_tempo", "R Temp.", 0.031),
+    ("winner_tempo", "W Temp.", 0.032),
+    ("comment", "", 0.02),
+]
+RUN_COLUMN_WIDTHS = {key: width for key, _, width in RUN_COLUMNS}
+RUN_COLUMN_INDEX = {key: index for index, (key, _, _) in enumerate(RUN_COLUMNS)}
+
+
+def run_column_width(column: str) -> int:
+    return screen_width_percentage(RUN_COLUMN_WIDTHS[column])
+
+
+def add_run_column(
+    layout: QtWidgets.QHBoxLayout,
+    widget: QtWidgets.QWidget,
+    column: str,
+):
+    widget.setFixedWidth(run_column_width(column))
+    layout.addWidget(widget)
+
+
+def add_empty_run_column(layout: QtWidgets.QHBoxLayout, column: str):
+    add_run_column(layout, SmallInfoLabel(""), column)
+
+
+def configure_run_grid(layout: QtWidgets.QGridLayout):
+    layout.setHorizontalSpacing(1)
+    layout.setVerticalSpacing(2)
+    layout.setContentsMargins(2, 2, 2, 2)
+    for key, index in RUN_COLUMN_INDEX.items():
+        layout.setColumnMinimumWidth(index, max(20, int(run_column_width(key) * 0.35)))
+        layout.setColumnStretch(index, max(1, int(RUN_COLUMN_WIDTHS[key] * 1000)))
+
+
+def add_run_grid_column(
+    layout: QtWidgets.QGridLayout,
+    row: int,
+    widget: QtWidgets.QWidget,
+    column: str,
+):
+    widget.setMinimumWidth(max(20, int(run_column_width(column) * 0.35)))
+    widget.setSizePolicy(
+        QtWidgets.QSizePolicy.Policy.Expanding,
+        QtWidgets.QSizePolicy.Policy.Preferred,
+    )
+    layout.addWidget(widget, row, RUN_COLUMN_INDEX[column])
+
+
 def format_price(price: float) -> str:
     if price > 20:
         return f"${price:.0f}"
@@ -643,85 +709,8 @@ class RunsTitleWidget(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFont(build_font(10, QtGui.QFont.Weight.Bold))
         self.setStyleSheet("background-color: transparent;")
-        finish_pos_label = HeadingLabel("Position")
-        finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
-        layout.addWidget(finish_pos_label)
-
-        margin_label = HeadingLabel("Mar.")
-        margin_label.setFixedWidth(screen_width_percentage(0.021))
-        layout.addWidget(margin_label)
-
-        venue_label = HeadingLabel("Venue")
-        venue_label.setFixedWidth(screen_width_percentage(0.06))
-        layout.addWidget(venue_label)
-
-        date_label = HeadingLabel("Date")
-        date_label.setFixedWidth(screen_width_percentage(0.04))
-        layout.addWidget(date_label)
-
-        distance_label = HeadingLabel("Dist.")
-        distance_label.setFixedWidth(screen_width_percentage(0.028))
-        layout.addWidget(distance_label)
-
-        track_condition_label = HeadingLabel("Condition")
-        track_condition_label.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(track_condition_label)
-
-        weight_label = HeadingLabel("Weight")
-        weight_label.setFixedWidth(screen_width_percentage(0.026))
-        layout.addWidget(weight_label)
-
-        jockey_label = HeadingLabel("Jockey")
-        jockey_label.setFixedWidth(screen_width_percentage(0.063))
-        layout.addWidget(jockey_label)
-
-        price_label = HeadingLabel("Odds")
-        price_label.setFixedWidth(screen_width_percentage(0.051))
-        layout.addWidget(price_label)
-
-        class_label = HeadingLabel("Class")
-        class_label.setFixedWidth(screen_width_percentage(0.076))
-        layout.addWidget(class_label)
-
-        days_since_label = HeadingLabel("Between")
-        days_since_label.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(days_since_label)
-
-        l800_sectional_label = HeadingLabel("L800")
-        l800_sectional_label.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(l800_sectional_label)
-
-        l600_sectional_label = HeadingLabel("L600")
-        l600_sectional_label.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(l600_sectional_label)
-
-        l400_sectional_label = HeadingLabel("L400")
-        l400_sectional_label.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(l400_sectional_label)
-
-        l200_sectional_label = HeadingLabel("L200")
-        l200_sectional_label.setFixedWidth(screen_width_percentage(0.025))
-        layout.addWidget(l200_sectional_label)
-
-        overall_time_label = HeadingLabel("R Time")
-        overall_time_label.setFixedWidth(screen_width_percentage(0.04))
-        layout.addWidget(overall_time_label)
-
-        winner_time_label = HeadingLabel("W Time")
-        winner_time_label.setFixedWidth(screen_width_percentage(0.03))
-        layout.addWidget(winner_time_label)
-
-        runner_tempo_label = HeadingLabel("R Temp.")
-        runner_tempo_label.setFixedWidth(screen_width_percentage(0.031))
-        layout.addWidget(runner_tempo_label)
-
-        winner_tempo_label = HeadingLabel("W Temp.")
-        winner_tempo_label.setFixedWidth(screen_width_percentage(0.032))
-        layout.addWidget(winner_tempo_label)
-
-        comment_label = HeadingLabel("")
-        comment_label.setFixedWidth(screen_width_percentage(0.017))
-        layout.addWidget(comment_label)
+        for key, label, _ in RUN_COLUMNS:
+            add_run_column(layout, HeadingLabel(label), key)
 
 
 class RunsWidget(QtWidgets.QWidget):
@@ -740,7 +729,6 @@ class RunsWidget(QtWidgets.QWidget):
             self.setStyleSheet("background-color: #444630;")
 
         finish_pos_label = SmallInfoLabel(f"{run.finish_position} of {run.starters}")
-        finish_pos_label.setFixedWidth(screen_width_percentage(0.03))
 
         tooltip = ""
         if run.winner_name is not None:
@@ -752,10 +740,9 @@ class RunsWidget(QtWidgets.QWidget):
         if run.competitors_won_since is not None:
             tooltip += f"\n\n{run.competitors_won_since} Won Since"
         finish_pos_label.setToolTip(tooltip)
-        layout.addWidget(finish_pos_label)
+        add_run_column(layout, finish_pos_label, "finish")
 
         margin_label = SmallInfoLabel(format_run_margin(run))
-        margin_label.setFixedWidth(screen_width_percentage(0.021))
 
         tooltip = ""
         if run.second_margin is not None:
@@ -763,23 +750,19 @@ class RunsWidget(QtWidgets.QWidget):
         if run.third_margin is not None:
             tooltip += f"\n3rd Margin: {run.third_margin}"
         margin_label.setToolTip(tooltip)
-        layout.addWidget(margin_label)
+        add_run_column(layout, margin_label, "margin")
 
         venue_label = SmallInfoLabel(run.venue)
-        venue_label.setFixedWidth(screen_width_percentage(0.06))
-        layout.addWidget(venue_label)
+        add_run_column(layout, venue_label, "venue")
 
         date_label = SmallInfoLabel(run.meeting_date)
-        date_label.setFixedWidth(screen_width_percentage(0.04))
-        layout.addWidget(date_label)
+        add_run_column(layout, date_label, "date")
 
         distance_label = SmallInfoLabel(f"{run.distance}m")
-        distance_label.setFixedWidth(screen_width_percentage(0.028))
-        layout.addWidget(distance_label)
+        add_run_column(layout, distance_label, "distance")
 
         track_condition_label = SmallInfoLabel(run.track_condition)
-        track_condition_label.setFixedWidth(screen_width_percentage(0.035))
-        layout.addWidget(track_condition_label)
+        add_run_column(layout, track_condition_label, "condition")
 
         if not run.is_trial:
             if run.weight is None:
@@ -792,29 +775,29 @@ class RunsWidget(QtWidgets.QWidget):
                     weight_label.setStyleSheet("color: red;")
                 elif run.weight - weight >= 2:
                     weight_label.setStyleSheet("color: orange;")
-            weight_label.setFixedWidth(screen_width_percentage(0.026))
-            layout.addWidget(weight_label)
+        else:
+            weight_label = SmallInfoLabel("")
+        add_run_column(layout, weight_label, "weight")
 
         jockey_label = SmallInfoLabel(run.jockey.name)
-        jockey_label.setFixedWidth(screen_width_percentage(0.063))
-        layout.addWidget(jockey_label)
+        add_run_column(layout, jockey_label, "jockey")
 
         if not run.is_trial:
             price_label = SmallInfoLabel(format_run_price(run))
-            price_label.setFixedWidth(screen_width_percentage(0.051))
-            layout.addWidget(price_label)
+            add_run_column(layout, price_label, "odds")
 
             class_text = run._class[:17]
             class_label = SmallInfoLabel(class_text)
             if run.is_class:
                 class_label.setStyleSheet("color: yellow;")
-            class_label.setFixedWidth(screen_width_percentage(0.076))
-            layout.addWidget(class_label)
+            add_run_column(layout, class_label, "class")
 
             days_since_label = SmallInfoLabel(f"{run.days_since_last} days")
-            days_since_label.setFixedWidth(screen_width_percentage(0.035))
-            layout.addWidget(days_since_label)
-            layout.addSpacerItem(QtWidgets.QSpacerItem(2, 0))
+            add_run_column(layout, days_since_label, "between")
+        else:
+            add_empty_run_column(layout, "odds")
+            add_empty_run_column(layout, "class")
+            add_empty_run_column(layout, "between")
 
         if not run.is_trial:
             sectional_specs = [
@@ -864,12 +847,8 @@ class RunsWidget(QtWidgets.QWidget):
                     meeting_rank,
                     position,
                 )
-                if distance == 200:
-                    sectional_label.setFixedWidth(screen_width_percentage(0.025))
-                else:
-                    sectional_label.setFixedWidth(screen_width_percentage(0.035))
                 sectional_label.setToolTip(tooltip)
-                layout.addWidget(sectional_label)
+                add_run_column(layout, sectional_label, label.lower())
 
             overall_time_label = SectionalWidget(
                 run.finish_time,
@@ -878,8 +857,7 @@ class RunsWidget(QtWidgets.QWidget):
                 0,
                 run.finish_position,
             )
-            overall_time_label.setFixedWidth(screen_width_percentage(0.04))
-            layout.addWidget(overall_time_label)
+            add_run_column(layout, overall_time_label, "runner_time")
 
             winner_time_label = SectionalWidget(
                 cleaned_winner_time(run),
@@ -888,22 +866,19 @@ class RunsWidget(QtWidgets.QWidget):
                 0,
                 0,
             )
-            winner_time_label.setFixedWidth(screen_width_percentage(0.03))
-            layout.addWidget(winner_time_label)
+            add_run_column(layout, winner_time_label, "winner_time")
 
             runner_tempo_label = TempoWidget(
                 run.form_benchmark.runner_tempo_difference,
                 run.form_benchmark.runner_tempo_label,
             )
-            runner_tempo_label.setFixedWidth(screen_width_percentage(0.03))
-            layout.addWidget(runner_tempo_label)
+            add_run_column(layout, runner_tempo_label, "runner_tempo")
 
             winner_tempo_label = TempoWidget(
                 run.form_benchmark.leader_tempo_difference,
                 run.form_benchmark.leader_tempo_label,
             )
-            winner_tempo_label.setFixedWidth(screen_width_percentage(0.03))
-            layout.addWidget(winner_tempo_label)
+            add_run_column(layout, winner_tempo_label, "winner_tempo")
 
             comment_icon = QtGui.QIcon("icons/comment.png")
             comment_icon_label = QtWidgets.QLabel()
@@ -919,8 +894,20 @@ class RunsWidget(QtWidgets.QWidget):
             if run.video_note is not None:
                 tooltip += f"\n\nVideo Note\n{run.video_note}"
             comment_icon_label.setToolTip(tooltip)
-            comment_icon_label.setFixedWidth(screen_width_percentage(0.02))
-            layout.addWidget(comment_icon_label)
+            add_run_column(layout, comment_icon_label, "comment")
+        else:
+            for column in (
+                "l800",
+                "l600",
+                "l400",
+                "l200",
+                "runner_time",
+                "winner_time",
+                "runner_tempo",
+                "winner_tempo",
+                "comment",
+            ):
+                add_empty_run_column(layout, column)
 
         layout.addStretch()
 
@@ -941,6 +928,279 @@ class SpellWidget(QtWidgets.QWidget):
         hline_end = QHLine()
         hline_end.setStyleSheet(hline_end.styleSheet() + "border-radius: 2;")
         layout.addWidget(hline_end)
+
+
+class RunHistoryWidget(QtWidgets.QWidget):
+    def __init__(self, selection: Selection):
+        super(RunHistoryWidget, self).__init__()
+        self.selection = selection
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+
+        layout = QtWidgets.QGridLayout()
+        configure_run_grid(layout)
+        self.setLayout(layout)
+
+        self.add_header(layout)
+        row = 1
+        to_date = datetime.now()
+        weight = selection.weight - selection.claim
+        for run in selection.runs[:10]:
+            from_date = datetime.strptime(run.meeting_date, "%Y-%m-%d")
+            if (to_date - from_date).days > (SPELL_THRESHOLD - 20):
+                spell_widget = SpellWidget((to_date - from_date).days)
+                layout.addWidget(spell_widget, row, 0, 1, len(RUN_COLUMNS))
+                row += 1
+            to_date = from_date
+            self.add_run(layout, row, run, weight)
+            row += 1
+
+    def add_header(self, layout: QtWidgets.QGridLayout):
+        for key, label, _ in RUN_COLUMNS:
+            add_run_grid_column(layout, 0, HeadingLabel(label), key)
+
+    def row_cell(self, widget: QtWidgets.QWidget, run: Run) -> QtWidgets.QFrame:
+        frame = QtWidgets.QFrame()
+        frame.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+        if run.is_trial:
+            frame.setStyleSheet("background-color: #303c46; color: grey;")
+        else:
+            frame.setStyleSheet("background-color: #444630;")
+        frame.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        cell_layout = QtWidgets.QHBoxLayout(frame)
+        cell_layout.setContentsMargins(2, 1, 2, 1)
+        cell_layout.setSpacing(0)
+        cell_layout.addWidget(widget)
+        return frame
+
+    def add_cell(
+        self,
+        layout: QtWidgets.QGridLayout,
+        row: int,
+        run: Run,
+        column: str,
+        widget: QtWidgets.QWidget,
+    ):
+        widget.setMinimumWidth(0)
+        widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        add_run_grid_column(layout, row, self.row_cell(widget, run), column)
+
+    def add_empty_cell(
+        self,
+        layout: QtWidgets.QGridLayout,
+        row: int,
+        run: Run,
+        column: str,
+    ):
+        self.add_cell(layout, row, run, column, SmallInfoLabel(""))
+
+    def add_run(
+        self,
+        layout: QtWidgets.QGridLayout,
+        row: int,
+        run: Run,
+        weight: float,
+    ):
+        finish_pos_label = SmallInfoLabel(f"{run.finish_position} of {run.starters}")
+        tooltip = ""
+        if run.winner_name is not None:
+            tooltip += f"1st: {run.winner_name}"
+        if run.second_name is not None:
+            tooltip += f"\n2nd: {run.second_name}"
+        if run.third_name is not None:
+            tooltip += f"\n3rd: {run.third_name}"
+        if run.competitors_won_since is not None:
+            tooltip += f"\n\n{run.competitors_won_since} Won Since"
+        finish_pos_label.setToolTip(tooltip)
+        self.add_cell(layout, row, run, "finish", finish_pos_label)
+
+        margin_label = SmallInfoLabel(format_run_margin(run))
+        tooltip = ""
+        if run.second_margin is not None:
+            tooltip += f"2nd Margin: {run.second_margin}"
+        if run.third_margin is not None:
+            tooltip += f"\n3rd Margin: {run.third_margin}"
+        margin_label.setToolTip(tooltip)
+        self.add_cell(layout, row, run, "margin", margin_label)
+
+        self.add_cell(layout, row, run, "venue", SmallInfoLabel(run.venue))
+        self.add_cell(layout, row, run, "date", SmallInfoLabel(run.meeting_date))
+        self.add_cell(layout, row, run, "distance", SmallInfoLabel(f"{run.distance}m"))
+        self.add_cell(
+            layout, row, run, "condition", SmallInfoLabel(run.track_condition)
+        )
+
+        if not run.is_trial:
+            if run.weight is None:
+                weight_label = SmallInfoLabel(" - ")
+            else:
+                weight_label = SmallInfoLabel(f"{run.weight}kg")
+                if run.weight - weight >= 6:
+                    weight_label.setStyleSheet("color: #d503ff;")
+                elif run.weight - weight >= 4:
+                    weight_label.setStyleSheet("color: red;")
+                elif run.weight - weight >= 2:
+                    weight_label.setStyleSheet("color: orange;")
+        else:
+            weight_label = SmallInfoLabel("")
+        self.add_cell(layout, row, run, "weight", weight_label)
+        self.add_cell(layout, row, run, "jockey", SmallInfoLabel(run.jockey.name))
+
+        if not run.is_trial:
+            self.add_cell(
+                layout, row, run, "odds", SmallInfoLabel(format_run_price(run))
+            )
+
+            class_label = SmallInfoLabel(run._class[:17])
+            if run.is_class:
+                class_label.setStyleSheet("color: yellow;")
+            self.add_cell(layout, row, run, "class", class_label)
+            self.add_cell(
+                layout,
+                row,
+                run,
+                "between",
+                SmallInfoLabel(f"{run.days_since_last} days"),
+            )
+        else:
+            self.add_empty_cell(layout, row, run, "odds")
+            self.add_empty_cell(layout, row, run, "class")
+            self.add_empty_cell(layout, row, run, "between")
+
+        if not run.is_trial:
+            sectional_specs = [
+                (
+                    "l800",
+                    800,
+                    run.form_benchmark.runner_time_difference_l800,
+                    run.form_benchmark.runner_race_position_l800,
+                    run.form_benchmark.runner_meeting_position_l800,
+                ),
+                (
+                    "l600",
+                    600,
+                    run.form_benchmark.runner_time_difference_l600,
+                    run.form_benchmark.runner_race_position_l600,
+                    run.form_benchmark.runner_meeting_position_l600,
+                ),
+                (
+                    "l400",
+                    400,
+                    run.form_benchmark.runner_time_difference_l400,
+                    run.form_benchmark.runner_race_position_l400,
+                    run.form_benchmark.runner_meeting_position_l400,
+                ),
+                (
+                    "l200",
+                    200,
+                    run.form_benchmark.runner_time_difference_l200,
+                    run.form_benchmark.runner_race_position_l200,
+                    run.form_benchmark.runner_meeting_position_l200,
+                ),
+            ]
+            for column, distance, benchmark, race_rank, meeting_rank in sectional_specs:
+                position = position_at_distance(run, distance)
+                value = run_sectional_value(run, distance)
+                tooltip = ""
+                if benchmark is not None:
+                    tooltip += f"Benchmark: {benchmark:.1f}"
+                if race_rank is not None:
+                    tooltip += f"\nRace Rank: {race_rank}"
+                if meeting_rank is not None:
+                    tooltip += f"\nMeeting Rank: {meeting_rank}"
+                sectional_label = SectionalWidget(
+                    value,
+                    benchmark,
+                    race_rank,
+                    meeting_rank,
+                    position,
+                )
+                sectional_label.setToolTip(tooltip)
+                self.add_cell(layout, row, run, column, sectional_label)
+
+            self.add_cell(
+                layout,
+                row,
+                run,
+                "runner_time",
+                SectionalWidget(
+                    run.finish_time,
+                    run.form_benchmark.runner_time_difference,
+                    0,
+                    0,
+                    run.finish_position,
+                ),
+            )
+            self.add_cell(
+                layout,
+                row,
+                run,
+                "winner_time",
+                SectionalWidget(
+                    cleaned_winner_time(run),
+                    run.form_benchmark.winner_time_difference,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            self.add_cell(
+                layout,
+                row,
+                run,
+                "runner_tempo",
+                TempoWidget(
+                    run.form_benchmark.runner_tempo_difference,
+                    run.form_benchmark.runner_tempo_label,
+                ),
+            )
+            self.add_cell(
+                layout,
+                row,
+                run,
+                "winner_tempo",
+                TempoWidget(
+                    run.form_benchmark.leader_tempo_difference,
+                    run.form_benchmark.leader_tempo_label,
+                ),
+            )
+
+            comment_icon = QtGui.QIcon("icons/comment.png")
+            comment_icon_label = QtWidgets.QLabel()
+            comment_icon_label.setStyleSheet("background-color: transparent;")
+            comment_icon_label.setPixmap(
+                comment_icon.pixmap(
+                    screen_height_percentage(0.02), screen_width_percentage(0.02)
+                )
+            )
+            tooltip = ""
+            if run.video_comment is not None:
+                tooltip += f"Video Comment\n{run.video_comment}"
+            if run.video_note is not None:
+                tooltip += f"\n\nVideo Note\n{run.video_note}"
+            comment_icon_label.setToolTip(tooltip)
+            self.add_cell(layout, row, run, "comment", comment_icon_label)
+        else:
+            for column in (
+                "l800",
+                "l600",
+                "l400",
+                "l200",
+                "runner_time",
+                "winner_time",
+                "runner_tempo",
+                "winner_tempo",
+                "comment",
+            ):
+                self.add_empty_cell(layout, row, run, column)
 
 
 class SelectionWidget(QtWidgets.QWidget):
@@ -1205,7 +1465,7 @@ class SelectionDetailsWidget(QtWidgets.QWidget):
         chip_layout.addWidget(
             DetailChip(
                 "Record",
-                f"{selection.total_runs}:{selection.total_wins}-{selection.total_places}",
+                selection.record_text(),
             )
         )
         chip_layout.addWidget(DetailChip("Weight", weight_string))
@@ -1325,15 +1585,7 @@ class SelectionsWidget(QtWidgets.QWidget):
         layout.addWidget(SelectionDetailsWidget(selection, self.venue))
 
         if selection.runs:
-            layout.addWidget(RunsTitleWidget())
-
-        to_date = datetime.now()
-        for run in selection.runs[:10]:
-            from_date = datetime.strptime(run.meeting_date, "%Y-%m-%d")
-            if (to_date - from_date).days > (SPELL_THRESHOLD - 20):
-                layout.addWidget(SpellWidget((to_date - from_date).days))
-            to_date = from_date
-            layout.addWidget(RunsWidget(run, selection.weight - selection.claim))
+            layout.addWidget(RunHistoryWidget(selection))
         return widget
 
     def add_button(self, selection: Selection, venue: str):
